@@ -40,7 +40,7 @@ public struct SystemOneAnalyzer: EmotionAnalyzer {
             "questions": preset.questions,
         ]
         let start = Date()
-        let response = try await HTTP.postJSON(baseURL.appending(path: "v1/systemone"), body: body, timeout: 300)
+        let response = try await HTTP.post(baseURL.appending(path: "v1/systemone"), body: body, service: "决策模型", timeout: 300)
         let latency = Date().timeIntervalSince(start) * 1000
         guard let answers = response["answers"] as? [String: [String: Any]] else {
             throw AnalyzerError.badResponse("缺少 answers")

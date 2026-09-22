@@ -26,7 +26,7 @@ struct PanelView: View {
                 content.frame(maxHeight: .infinity, alignment: .top)
             }
             Hairline()
-            PrivacyFooter()
+            PrivacyFooter(cloud: settings.cloudProviderName)
         }
         .frame(minWidth: 340, idealWidth: 372, minHeight: 540)
         .sheet(isPresented: $showSettings) { SettingsView(monitor: monitor, settings: settings) }
@@ -550,10 +550,18 @@ struct Onboarding: View {
 }
 
 struct PrivacyFooter: View {
+    /// 用云端模型时的服务名；本地为 nil。
+    var cloud: String? = nil
+
     var body: some View {
         HStack(spacing: 5) {
-            Image(systemName: "lock.fill").font(.system(size: 9))
-            Text("只在本机分析，不上传聊天内容 · 结果仅供参考")
+            if let cloud {
+                Image(systemName: "icloud.and.arrow.up").font(.system(size: 9)).foregroundStyle(.orange)
+                Text("云端分析：消息会发送给 \(cloud) · 结果仅供参考").foregroundStyle(.orange)
+            } else {
+                Image(systemName: "lock.fill").font(.system(size: 9))
+                Text("只在本机分析，不上传聊天内容 · 结果仅供参考")
+            }
         }
         .font(.system(size: 10.5))
         .foregroundStyle(.tertiary)

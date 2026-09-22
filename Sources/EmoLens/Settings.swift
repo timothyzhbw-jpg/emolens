@@ -2,14 +2,14 @@ import CoreGraphics
 import EmoLensCore
 import Foundation
 
-enum EngineKind: String, CaseIterable, Identifiable {
-    case llm, combined, systemOne
+typealias EngineKind = Engine
 
-    var id: String { rawValue }
+extension Engine: Identifiable {
+    public var id: String { rawValue }
 
     var name: String {
         switch self {
-        case .llm: "本地大模型"
+        case .llm: "大模型"
         case .combined: "双引擎"
         case .systemOne: "决策模型"
         }
@@ -17,9 +17,24 @@ enum EngineKind: String, CaseIterable, Identifiable {
 
     var detail: String {
         switch self {
-        case .llm: "Ollama · 能读潜台词、给回复建议（推荐）"
-        case .combined: "大模型 + Kev 复核严重信号，更稳，约多占 10 GB 内存"
+        case .llm: "读潜台词、给回复建议（推荐）"
+        case .combined: "大模型 + Kev 复核严重信号，更稳；需要同时运行 Kev"
         case .systemOne: "Kev · 校准概率，读不懂潜台词，较慢"
+        }
+    }
+}
+
+/// 大模型从哪来。
+enum LLMProvider: String, CaseIterable, Identifiable {
+    case ollama, openai, anthropic
+
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .ollama: "本地 Ollama"
+        case .openai: "OpenAI 兼容"
+        case .anthropic: "Anthropic Claude"
         }
     }
 }
@@ -36,6 +51,14 @@ final class AppSettings: ObservableObject {
     @Published var ollamaURL: String { didSet { defaults.set(ollamaURL, forKey: "ollamaURL") } }
     @Published var ollamaModel: String { didSet { defaults.set(ollamaModel, forKey: "ollamaModel") } }
     @Published var systemOneURL: String { didSet { defaults.set(systemOneURL, forKey: "systemOneURL") } }
+    @Published var llmProvider: LLMProvider { didSet { defaults.set(llmProvider.rawValue, forKey: "llmProvider") } }
+    @Published var openAIPreset: String { didSet { defaults.set(openAIPreset, forKey: "openAIPreset") } }
+    @Published var openAIBaseURL: String { didSet { defaults.set(openAIBaseURL, forKey: "openAIBaseURL") } }
+    @Published var openAIModel: String { didSet { defaults.set(openAIModel, forKey: "openAIModel") } }
+    @Published var anthropicModel: String { didSet { defaults.set(anthropicModel, forKey: "anthropicModel") } }
+    /// API Key 存在钥匙串里，不进 UserDefaults。
+    @Published var openAIKey: String { didSet { Keychain.save(openAIKey, for: "openai") } }
+    @Published var anthropicKey: String { didSet { Keychain.save(anthropicKey, for: "anthropic") } }
     @Published var relationship: String { didSet { defaults.set(relationship, forKey: "relationship") } }
     @Published var interval: Double { didSet { defaults.set(interval, forKey: "interval") } }
     @Published var windowID: CGWindowID { didSet { defaults.set(Int(windowID), forKey: "windowID") } }
@@ -48,6 +71,14 @@ final class AppSettings: ObservableObject {
         ollamaURL = defaults.string(forKey: "ollamaURL") ?? "http://127.0.0.1:11434"
         ollamaModel = defaults.string(forKey: "ollamaModel") ?? "qwen3.5:4b"
         systemOneURL = defaults.string(forKey: "systemOneURL") ?? "http://127.0.0.1:8009"
+        llmProvider = LLMProvider(rawValue: defaults.string(forKey: "llmProvider") ?? "") ?? .ollama
+        let preset = OpenAIPreset.named(defaults.string(forKey: "openAIPreset") ?? "openai")
+        openAIPreset = preset.id
+        openAIBaseURL = defaults.string(forKey: "openAIBaseURL") ?? preset.baseURL
+        openAIModel = defaults.string(forKey: "openAIModel") ?? preset.model
+        anthropicModel = defaults.string(forKey: "anthropicModel") ?? AnthropicBackend.models[0]
+        openAIKey = Keychain.read("openai")
+        anthropicKey = Keychain.read("anthropic")
         relationship = defaults.string(forKey: "relationship") ?? "不确定"
         interval = defaults.object(forKey: "interval") as? Double ?? 1.5
         windowID = CGWindowID(defaults.integer(forKey: "windowID"))
@@ -56,25 +87,50 @@ final class AppSettings: ObservableObject {
         region = r.count == 4 ? CGRect(x: r[0], y: r[1], width: r[2], height: r[3]) : CGRect(x: 0, y: 0, width: 1, height: 1)
     }
 
-    func makeAnalyzer() throws -> EmotionAnalyzer {
-        switch engine {
-        case .llm: return try llmAnalyzer()
-        case .combined:
-            let serious = CombinedAnalyzer.seriousFlags.map(\.rawValue)
-            return CombinedAnalyzer(primary: try llmAnalyzer(), checker: try systemOneAnalyzer(only: serious))
-        case .systemOne: return try systemOneAnalyzer()
+    /// 选一个 OpenAI 兼容预设：填好地址和常用模型。
+    func applyOpenAIPreset(_ id: String) {
+        let preset = OpenAIPreset.named(id)
+        openAIPreset = preset.id
+        if !preset.baseURL.isEmpty { openAIBaseURL = preset.baseURL }
+        if !preset.model.isEmpty { openAIModel = preset.model }
+    }
+
+    /// 云端服务名；用本地模型或只用决策模型时为 nil。界面据此提示消息会不会发出去。
+    var cloudProviderName: String? {
+        guard engine != .systemOne else { return nil }
+        switch llmProvider {
+        case .ollama: return nil
+        case .openai:
+            let preset = OpenAIPreset.named(openAIPreset)
+            return preset.id == "custom" ? (URL(string: openAIBaseURL)?.host() ?? "云端服务") : preset.name
+        case .anthropic: return "Anthropic"
         }
     }
 
-    private func llmAnalyzer() throws -> OllamaAnalyzer {
-        let prompt = try LLMPrompt.load(from: Presets.url("emotion.llm.zh.json"))
-        return OllamaAnalyzer(baseURL: try url(ollamaURL), model: ollamaModel, prompt: prompt, relationship: relationship)
+    /// 当前设置对应的分析器配置。
+    func analyzerConfig() throws -> AnalyzerConfig {
+        var config = AnalyzerConfig()
+        config.engine = engine
+        config.systemOneURL = try url(systemOneURL)
+        switch llmProvider {
+        case .ollama:
+            config.llm = .ollama(baseURL: try url(ollamaURL), model: ollamaModel)
+        case .openai:
+            guard !openAIKey.isEmpty else { throw AnalyzerError.badResponse("还没填 API Key：设置 → 分析引擎 → OpenAI 兼容") }
+            guard !openAIModel.isEmpty else { throw AnalyzerError.badResponse("还没填模型名") }
+            let preset = OpenAIPreset.named(openAIPreset)
+            config.llm = .openAICompatible(baseURL: try url(openAIBaseURL), model: openAIModel, apiKey: openAIKey,
+                                           supportsJSONSchema: preset.supportsJSONSchema,
+                                           providerName: cloudProviderName ?? preset.name)
+        case .anthropic:
+            guard !anthropicKey.isEmpty else { throw AnalyzerError.badResponse("还没填 Claude 的 API Key：设置 → 分析引擎 → Anthropic Claude") }
+            config.llm = .anthropic(model: anthropicModel, apiKey: anthropicKey)
+        }
+        return config
     }
 
-    private func systemOneAnalyzer(only ids: [String]? = nil) throws -> SystemOneAnalyzer {
-        var preset = try SystemOnePreset.load(from: Presets.url("emotion.zh.json"))
-        if let ids { preset = preset.subset(ids) }
-        return SystemOneAnalyzer(baseURL: try url(systemOneURL), preset: preset, relationship: relationship)
+    func makeAnalyzer() throws -> EmotionAnalyzer {
+        try analyzerConfig().makeAnalyzer(relationship: relationship)
     }
 
     private func url(_ text: String) throws -> URL {
@@ -83,20 +139,4 @@ final class AppSettings: ObservableObject {
         }
         return url
     }
-}
-
-/// 预设文件位置：环境变量 EMOLENS_PRESETS > .app 内 Resources/presets > 当前目录 presets/。
-enum Presets {
-    static var directory: URL {
-        if let env = ProcessInfo.processInfo.environment["EMOLENS_PRESETS"] {
-            return URL(fileURLWithPath: env)
-        }
-        if let bundled = Bundle.main.resourceURL?.appending(path: "presets"),
-           FileManager.default.fileExists(atPath: bundled.path) {
-            return bundled
-        }
-        return URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appending(path: "presets")
-    }
-
-    static func url(_ name: String) -> URL { directory.appending(path: name) }
 }

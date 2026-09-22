@@ -9,45 +9,46 @@ public struct LLMPrompt: Codable, Sendable {
 
     public var system: String
     public var examples: [Example]
+    /// 输出格式的 JSON Schema 原文（同目录的 emotion.schema.json），云端模型用它做结构化输出。
+    public var schema: String?
 
     public static func load(from url: URL) throws -> LLMPrompt {
-        try JSONDecoder().decode(LLMPrompt.self, from: Data(contentsOf: url))
+        var prompt = try JSONDecoder().decode(LLMPrompt.self, from: Data(contentsOf: url))
+        let schemaURL = url.deletingLastPathComponent().appending(path: "emotion.schema.json")
+        prompt.schema = try? String(contentsOf: schemaURL, encoding: .utf8)
+        return prompt
     }
 }
 
-/// 通过本地 Ollama（默认 qwen3.5:4b）读潜台词、给回复建议。数据不出本机。
-public struct OllamaAnalyzer: EmotionAnalyzer {
-    public var name: String { "本地大模型 · \(model)" }
-    public var baseURL: URL
-    public var model: String
+/// 用生成式大模型读潜台词、给回复建议。后端可以是本地 Ollama、OpenAI 兼容服务或 Claude。
+public struct LLMAnalyzer: EmotionAnalyzer {
+    public var backend: ChatBackend
     public var prompt: LLMPrompt
     public var relationship: String?
+    public var name: String { backend.name }
 
-    public init(baseURL: URL = URL(string: "http://127.0.0.1:11434")!, model: String = "qwen3.5:4b",
-                prompt: LLMPrompt, relationship: String? = nil) {
-        self.baseURL = baseURL
-        self.model = model
+    public init(backend: ChatBackend, prompt: LLMPrompt, relationship: String? = nil) {
+        self.backend = backend
         self.prompt = prompt
         self.relationship = relationship
     }
 
-    public func analyze(context: [ChatMessage], latest: ChatMessage) async throws -> EmotionReport {
-        var messages: [[String: String]] = [["role": "system", "content": prompt.system]]
+    /// few-shot 示例在前，当前对话在最后。
+    func turns(context: [ChatMessage], latest: ChatMessage) throws -> [ChatTurn] {
+        var turns: [ChatTurn] = []
         for example in prompt.examples {
-            messages.append(["role": "user", "content": example.chat])
-            messages.append(["role": "assistant", "content": try Self.encodeInOrder(example.answer)])
+            turns.append(ChatTurn(role: "user", content: example.chat))
+            turns.append(ChatTurn(role: "assistant", content: try Self.encodeInOrder(example.answer)))
         }
-        messages.append(["role": "user", "content": ChatState.render(context: context, latest: latest, relationship: relationship)])
-        let body: [String: Any] = [
-            "model": model, "stream": false, "think": false, "format": "json",
-            "options": ["temperature": 0.2], "messages": messages,
-        ]
+        turns.append(ChatTurn(role: "user", content: ChatState.render(context: context, latest: latest, relationship: relationship)))
+        return turns
+    }
+
+    public func analyze(context: [ChatMessage], latest: ChatMessage) async throws -> EmotionReport {
         let start = Date()
-        let response = try await HTTP.postJSON(baseURL.appending(path: "api/chat"), body: body)
+        let content = try await backend.complete(system: prompt.system, turns: turns(context: context, latest: latest),
+                                                 schema: prompt.schema)
         let latency = Date().timeIntervalSince(start) * 1000
-        guard let content = (response["message"] as? [String: Any])?["content"] as? String else {
-            throw AnalyzerError.badResponse("缺少 message.content")
-        }
         return try Self.report(from: content, message: latest, engine: name, latencyMs: latency)
     }
 

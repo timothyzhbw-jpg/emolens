@@ -83,10 +83,27 @@ public protocol EmotionAnalyzer: Sendable {
 
 public enum AnalyzerError: LocalizedError {
     case badResponse(String)
+    case refused(String)
+    case http(service: String, status: Int, detail: String)
 
     public var errorDescription: String? {
         switch self {
         case .badResponse(let detail): "分析引擎返回了无法识别的结果：\(detail)"
+        case .refused(let detail): detail
+        case .http(let service, let status, let detail): Self.describe(service: service, status: status, detail: detail)
+        }
+    }
+
+    /// 把常见状态码翻成用户知道怎么办的话。
+    static func describe(service: String, status: Int, detail: String) -> String {
+        switch status {
+        case 401: "\(service) 的 API Key 无效或没填，请在设置里检查。"
+        case 402: "\(service) 账户余额不足或未开通付费。"
+        case 403: "这个 API Key 没有权限使用该模型。（\(detail)）"
+        case 404: "\(service) 找不到这个模型或地址，请检查模型名和服务地址。（\(detail)）"
+        case 429: "\(service) 请求太频繁或额度用完了，稍后再试。"
+        case 500, 502, 503, 529: "\(service) 服务暂时繁忙（HTTP \(status)），稍后再试。"
+        default: "\(service) 返回错误（HTTP \(status)）：\(detail)"
         }
     }
 }
@@ -109,23 +126,5 @@ public enum ChatState {
         text += context.map(line).joined(separator: "\n")
         text += "\n\n需要分析的是对方最新这条：\n" + line(latest)
         return text
-    }
-}
-
-enum HTTP {
-    static func postJSON(_ url: URL, body: Any, timeout: TimeInterval = 120) async throws -> [String: Any] {
-        var request = URLRequest(url: url, timeoutInterval: timeout)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, response) = try await URLSession.shared.data(for: request)
-        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-            let detail = String(data: data, encoding: .utf8) ?? ""
-            throw AnalyzerError.badResponse("HTTP \(http.statusCode) \(detail.prefix(200))")
-        }
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw AnalyzerError.badResponse("不是 JSON 对象")
-        }
-        return object
     }
 }

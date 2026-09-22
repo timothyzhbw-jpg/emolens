@@ -1,0 +1,115 @@
+{
+  "type": "object",
+  "properties": {
+    "literal": {
+      "type": "string",
+      "description": "字面意思"
+    },
+    "consistency": {
+      "type": "string",
+      "enum": [
+        "一致",
+        "反话",
+        "撒娇",
+        "没说完"
+      ]
+    },
+    "real_meaning": {
+      "type": "string",
+      "description": "真实想法，一句话，必须能在原文里找到依据"
+    },
+    "emotion": {
+      "type": "string",
+      "enum": [
+        "开心",
+        "平静",
+        "亲昵",
+        "难过",
+        "委屈",
+        "生气",
+        "失望",
+        "焦虑",
+        "冷淡",
+        "尴尬"
+      ]
+    },
+    "intensity": {
+      "type": "integer",
+      "enum": [
+        0,
+        1,
+        2,
+        3
+      ]
+    },
+    "target": {
+      "type": "string",
+      "enum": [
+        "我",
+        "自己",
+        "别人",
+        "这件事"
+      ]
+    },
+    "angry_at_me": {
+      "type": "boolean"
+    },
+    "perfunctory": {
+      "type": "boolean"
+    },
+    "needs_comfort": {
+      "type": "boolean"
+    },
+    "testing": {
+      "type": "boolean"
+    },
+    "cold_distance": {
+      "type": "boolean"
+    },
+    "conflict": {
+      "type": "boolean"
+    },
+    "manipulation": {
+      "type": "boolean"
+    },
+    "self_harm": {
+      "type": "boolean"
+    },
+    "best_response": {
+      "type": "string",
+      "enum": [
+        "安慰共情",
+        "真诚道歉",
+        "解释澄清",
+        "给对方空间",
+        "用行动关心",
+        "正常聊天",
+        "守住边界",
+        "寻求帮助"
+      ]
+    },
+    "suggested_reply": {
+      "type": "string",
+      "description": "「我」要发给对方的一句口语回复"
+    }
+  },
+  "required": [
+    "literal",
+    "consistency",
+    "real_meaning",
+    "emotion",
+    "intensity",
+    "target",
+    "angry_at_me",
+    "perfunctory",
+    "needs_comfort",
+    "testing",
+    "cold_distance",
+    "conflict",
+    "manipulation",
+    "self_harm",
+    "best_response",
+    "suggested_reply"
+  ],
+  "additionalProperties": false
+}

@@ -2,7 +2,7 @@
 
 **读懂对方那句「没事，你开心就好」。**
 
-EmoLens 是一个开源的 macOS 桌面小工具：像共享屏幕一样实时「看着」你的微信聊天窗口，读出对方刚发来的消息，用**本机运行**的模型分析情绪和潜台词，在一个悬浮面板里告诉你：
+EmoLens 是一个开源的 macOS 桌面小工具：像共享屏幕一样实时「看着」你的微信聊天窗口，读出对方刚发来的消息，分析情绪和潜台词，在一个悬浮面板里告诉你：
 
 - 对方现在是什么情绪、有多强烈，情绪冲着谁
 - 字面意思和真实想法是否一致：**反话、撒娇、没说完**
@@ -14,7 +14,9 @@ EmoLens 是一个开源的 macOS 桌面小工具：像共享屏幕一样实时�
   <img src="docs/screenshots/manipulation-dark.png" width="300" alt="识别情感操控（暗色模式）">
 </p>
 
-> 截图、文字识别、分析全部在你的电脑上完成，不上传任何聊天内容。EmoLens 不接入微信协议、不注入、不自动发消息，只读屏幕，因此不会导致封号。
+> 默认情况下，截图、文字识别、分析全部在你的电脑上完成（本地 Ollama 模型），不上传任何聊天内容。你也可以在设置里换成 **OpenAI、Claude、DeepSeek、通义千问**等云端大模型：理解潜台词更准，但对方的消息和最近约 10 条上下文会发送给你选的服务商，面板底部会一直提示。
+>
+> EmoLens 不接入微信协议、不注入、不自动发消息，只读屏幕，因此不会导致封号。
 
 ```
 微信窗口 ──ScreenCaptureKit 截图──▶ Vision 中文 OCR ──▶ 按气泡左右位置区分「对方 / 我」
@@ -26,7 +28,7 @@ EmoLens 是一个开源的 macOS 桌面小工具：像共享屏幕一样实时�
 需要：macOS 14+（推荐 Apple Silicon）、Xcode 或 Command Line Tools（Swift 5.10+）、[Ollama](https://ollama.com)。
 
 ```bash
-ollama pull qwen3.5:4b          # 默认分析模型，约 3.4 GB
+ollama pull qwen3.5:4b          # 默认的本地分析模型，约 3.4 GB（只用云端模型可以跳过）
 git clone https://github.com/timothyzhbw-jpg/emolens.git && cd emolens
 ./scripts/build_app.sh          # 生成 build/EmoLens.app
 open build/EmoLens.app
@@ -50,9 +52,24 @@ swift run EmoLensDemo
 
 ## 分析引擎
 
+### 大模型从哪来
+
+| 来源 | 说明 |
+|---|---|
+| **本地 Ollama**（默认） | `qwen3.5:4b`，数据不出本机，免费。4B 小模型对复杂语境（例如甜言蜜语里夹着控制）偶尔判错 |
+| **OpenAI 兼容** | 一套设置支持 OpenAI（默认 `gpt-5.5`）、DeepSeek、通义千问、OpenRouter 和任何兼容 OpenAI 接口的服务；选预设自动填地址，模型名可改 |
+| **Anthropic Claude** | 原生 Messages API，默认 `claude-opus-5`，也可选 `claude-sonnet-5`、`claude-haiku-4-5` |
+
+- 云端模型用**结构化输出**（JSON Schema）严格约束返回格式；不支持 JSON Schema 的兼容服务自动改用 JSON 模式。
+- `claude-opus-5` 默认开启 Anthropic 的服务端拒答兜底（`fallbacks: "default"`）：极少数情况下安全分类器误拦时，由服务端自动换模型重跑。
+- API Key 只保存在 macOS 钥匙串里，不写进配置文件，也不会出现在日志里。
+- 云端按量计费：每分析一条消息都是一次请求（系统提示 + 示例约几千 token，会自动缓存）。价格以各服务商官网为准。
+
+### 三种引擎
+
 | 引擎 | 强项 | 弱项 | 占用 |
 |---|---|---|---|
-| **本地大模型**（默认，Ollama + qwen3.5:4b） | 能读中文潜台词（反话、敷衍、撒娇、报喜不报忧），会写回复建议 | 4B 小模型不够稳定，严重信号（尤其情感操控）偶尔漏判 | 约 5 GB 内存，每条 3–5 秒 |
+| **大模型**（默认） | 能读中文潜台词（反话、敷衍、撒娇、报喜不报忧），会写回复建议 | 本地 4B 小模型不够稳定，严重信号偶尔漏判；换成云端大模型会好很多 | 本地约 5 GB 内存、每条 3–5 秒；云端几乎不占本机资源 |
 | **双引擎**（大模型 + [Kev](https://github.com/jaredpalmer/kev) 复核） | 大模型负责潜台词和回复；Kev 并行复核「生我的气 / 冷战 / 操控 / 自伤」，两者取较高值 | 需要同时运行 Kev 服务 | 再多约 10 GB 内存 |
 | **决策模型**（Kev，System One API） | 输出校准过的概率，严重信号稳定 | 读不懂中文潜台词（反话、敷衍几乎全漏），没有回复建议，Mac 上较慢 | 约 10 GB 内存 |
 
@@ -93,7 +110,7 @@ KEV_DTYPE=bf16 KEV_MERGE=0 uv run --extra serve python -m kev.serve --run jaredp
 ## 负责任地使用
 
 - **这不是心理诊断工具**，也不能代替真诚的沟通。
-- 聊天里有对方的隐私。EmoLens 默认不保存任何记录；请不要用它监视别人。
+- 聊天里有对方的隐私。EmoLens 默认不保存任何记录；请不要用它监视别人。选用云端模型前，想清楚是否愿意把这些内容交给服务商处理。
 - 看到「自伤风险」提醒时：先温和地问一句对方现在是否安全，陪着 TA；如果 TA 提到具体的打算、正在伤害自己或突然联系不上，请马上联系 TA 身边的人，或拨打 120 / 110。心理援助热线：**12356**（多数地区已开通），**希望24热线 400-161-9995**。
 - 看到「情感操控」提醒时：你的感受是真实的。可以温和而坚定地守住边界，必要时向信任的人求助。
 
@@ -101,12 +118,12 @@ KEV_DTYPE=bf16 KEV_MERGE=0 uv run --extra serve python -m kev.serve --run jaredp
 
 ```bash
 swift build          # 编译
-swift test           # 单元测试（聊天气泡解析、新消息检测、引擎解析、安全网）
+swift test           # 单元测试（聊天气泡解析、新消息检测、引擎解析与请求格式、安全网）
 swift run EmoLens    # 直接运行（屏幕录制权限会记在终端名下）
 ```
 
 ```
-Sources/EmoLensCore/   纯逻辑：OCR 行 → 聊天消息、新消息检测、分析引擎、安全网
+Sources/EmoLensCore/   纯逻辑：OCR 行 → 聊天消息、新消息检测、分析引擎（本地 / OpenAI 兼容 / Claude）、安全网
 Sources/EmoLens/       macOS 应用：截图、OCR、悬浮面板、设置
 Sources/EmoLensDemo/   仿微信演示聊天窗口
 presets/               问题集与提示词
@@ -128,4 +145,4 @@ presets/               问题集与提示词
 
 ---
 
-**English summary.** EmoLens is an open-source macOS menu-panel app that watches a chat window (WeChat by default) via ScreenCaptureKit, OCRs new messages locally with Apple Vision, and analyzes the other person's latest message with a local model (Ollama, optionally cross-checked by a System One decision model such as Kev): emotion, subtext (sarcasm / coy / unsaid), relationship signals including manipulation and self-harm risk, and a suggested reply. Everything runs on-device; nothing is uploaded, and it never touches the WeChat protocol.
+**English summary.** EmoLens is an open-source macOS floating-panel app that watches a chat window (WeChat by default) via ScreenCaptureKit, OCRs new messages locally with Apple Vision, and analyzes the other person's latest message with a local model (Ollama, optionally cross-checked by a System One decision model such as Kev): emotion, subtext (sarcasm / coy / unsaid), relationship signals including manipulation and self-harm risk, and a suggested reply. By default everything runs on-device; you can opt into cloud models (OpenAI-compatible services such as OpenAI, DeepSeek, Qwen, OpenRouter, or Anthropic Claude via the native Messages API with structured outputs), in which case the message and recent context are sent to that provider. It never touches the WeChat protocol.

@@ -10,7 +10,7 @@ final class AnalyzerTests: XCTestCase {
         "angry_at_me":"true","needs_comfort":1,"self_harm":false,"testing":85,
         "real_meaning":"其实很失落","best_response":"真诚道歉","suggested_reply":"对不起"}
         """
-        let r = try OllamaAnalyzer.report(from: content, message: latest, engine: "t", latencyMs: 1)
+        let r = try LLMAnalyzer.report(from: content, message: latest, engine: "t", latencyMs: 1)
         XCTAssertEqual(r.emotion, "委屈")
         XCTAssertEqual(r.intensity, 2)
         XCTAssertEqual(r.consistency, "反话")
@@ -24,32 +24,32 @@ final class AnalyzerTests: XCTestCase {
     }
 
     func testLLMOutputWithoutJSONThrows() {
-        XCTAssertThrowsError(try OllamaAnalyzer.report(from: "抱歉，我无法回答", message: latest, engine: "t", latencyMs: 1))
+        XCTAssertThrowsError(try LLMAnalyzer.report(from: "抱歉，我无法回答", message: latest, engine: "t", latencyMs: 1))
     }
 
     func testConsistencyIsNormalized() throws {
         let messy = #"{"emotion":"冷淡","consistency":"敷衍或不想争了（「哦」「都行」「你看着办」）"}"#
-        XCTAssertNil(try OllamaAnalyzer.report(from: messy, message: latest, engine: "t", latencyMs: 1).consistency)
+        XCTAssertNil(try LLMAnalyzer.report(from: messy, message: latest, engine: "t", latencyMs: 1).consistency)
         let wrapped = #"{"emotion":"委屈","consistency":"反话（嘴上说没事）"}"#
-        XCTAssertEqual(try OllamaAnalyzer.report(from: wrapped, message: latest, engine: "t", latencyMs: 1).consistency, "反话")
+        XCTAssertEqual(try LLMAnalyzer.report(from: wrapped, message: latest, engine: "t", latencyMs: 1).consistency, "反话")
     }
 
     func testCurlyQuoteDelimitersAreRepaired() throws {
         let broken = #"{"emotion": "生气", "real_meaning": “想控制我”, "suggested_reply": "我们聊聊“信任”这件事吧”}"#
-        let r = try OllamaAnalyzer.report(from: broken, message: latest, engine: "t", latencyMs: 1)
+        let r = try LLMAnalyzer.report(from: broken, message: latest, engine: "t", latencyMs: 1)
         XCTAssertEqual(r.realMeaning, "想控制我")
         XCTAssertEqual(r.suggestedReply, "我们聊聊“信任”这件事吧", "字符串内部的中文引号要保留")
     }
 
     func testExamplesAreEncodedInPromptOrder() throws {
-        let text = try OllamaAnalyzer.encodeInOrder([
+        let text = try LLMAnalyzer.encodeInOrder([
             "suggested_reply": .string("好"), "emotion": .string("开心"), "literal": .string("嗯"), "intensity": .number(1),
         ])
         XCTAssertEqual(text, #"{"literal": "嗯", "emotion": "开心", "intensity": 1, "suggested_reply": "好"}"#)
     }
 
     func testIntensityIsClamped() throws {
-        let r = try OllamaAnalyzer.report(from: #"{"emotion":"生气","intensity":9}"#, message: latest, engine: "t", latencyMs: 1)
+        let r = try LLMAnalyzer.report(from: #"{"emotion":"生气","intensity":9}"#, message: latest, engine: "t", latencyMs: 1)
         XCTAssertEqual(r.intensity, 3)
         XCTAssertTrue(r.activeFlags().isEmpty)
     }

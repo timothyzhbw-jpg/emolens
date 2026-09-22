@@ -63,8 +63,11 @@ struct SettingsView: View {
                     .pickerStyle(.radioGroup)
                     .onChange(of: settings.engine) { check = .idle }
                     if settings.engine != .systemOne {
-                        TextField("Ollama 地址", text: $settings.ollamaURL)
-                        TextField("模型", text: $settings.ollamaModel)
+                        Picker("大模型来源", selection: $settings.llmProvider) {
+                            ForEach(LLMProvider.allCases) { Text($0.name).tag($0) }
+                        }
+                        .onChange(of: settings.llmProvider) { check = .idle }
+                        providerFields
                     }
                     if settings.engine != .llm {
                         TextField("Kev（System One）地址", text: $settings.systemOneURL)
@@ -99,8 +102,36 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 20).padding(.vertical, 14)
         }
-        .frame(width: 480, height: 700)
+        .frame(width: 480, height: 720)
         .task { await loadWindows() }
+    }
+
+    @ViewBuilder private var providerFields: some View {
+        switch settings.llmProvider {
+        case .ollama:
+            TextField("Ollama 地址", text: $settings.ollamaURL)
+            TextField("模型", text: $settings.ollamaModel)
+        case .openai:
+            Picker("服务", selection: Binding(get: { settings.openAIPreset }, set: { settings.applyOpenAIPreset($0) })) {
+                ForEach(OpenAIPreset.all) { Text($0.name).tag($0.id) }
+            }
+            TextField("接口地址", text: $settings.openAIBaseURL)
+            TextField("模型", text: $settings.openAIModel, prompt: Text("例如 gpt-5.5"))
+            SecureField("API Key", text: $settings.openAIKey)
+            cloudNote
+        case .anthropic:
+            Picker("模型", selection: $settings.anthropicModel) {
+                ForEach(AnthropicBackend.models, id: \.self) { Text($0).tag($0) }
+            }
+            SecureField("API Key", text: $settings.anthropicKey)
+            cloudNote
+        }
+    }
+
+    private var cloudNote: some View {
+        Label("云端模式：对方的消息和最近约 10 条聊天会发送给 \(settings.cloudProviderName ?? "云端服务") 分析。API Key 只保存在本机钥匙串里。",
+              systemImage: "icloud.and.arrow.up")
+            .font(.system(size: 11)).foregroundStyle(.orange)
     }
 
     @ViewBuilder private var checkLabel: some View {
@@ -117,35 +148,58 @@ struct SettingsView: View {
         windows = found.map(WindowOption.init).sorted { $0.name < $1.name }
     }
 
-    /// 只读地探测引擎：Ollama 查模型列表，Kev 查 /v1/models。
+    /// 只读地探测引擎：查模型列表（不消耗 token）。
     private func testConnection() async {
         check = .checking
         var results: [String] = []
         do {
             if settings.engine != .systemOne {
-                let data = try await get(settings.ollamaURL, path: "api/tags")
-                let names = ((try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["models"] as? [[String: Any]])?
-                    .compactMap { $0["name"] as? String } ?? []
-                guard names.contains(settings.ollamaModel) else {
-                    check = .failed("Ollama 里没有 \(settings.ollamaModel)，先运行 ollama pull \(settings.ollamaModel)")
-                    return
+                switch settings.llmProvider {
+                case .ollama:
+                    let names = try await modelNames(settings.ollamaURL, path: "api/tags", key: "models", field: "name")
+                    guard names.contains(settings.ollamaModel) else {
+                        check = .failed("Ollama 里没有 \(settings.ollamaModel)，先运行 ollama pull \(settings.ollamaModel)")
+                        return
+                    }
+                    results.append("Ollama 正常")
+                case .openai:
+                    _ = try await get(settings.openAIBaseURL, path: "models",
+                                      headers: ["Authorization": "Bearer \(settings.openAIKey)"])
+                    results.append("\(settings.cloudProviderName ?? "服务") 连接正常")
+                case .anthropic:
+                    _ = try await get("https://api.anthropic.com", path: "v1/models",
+                                      headers: ["x-api-key": settings.anthropicKey, "anthropic-version": "2023-06-01"])
+                    results.append("Claude 连接正常")
                 }
-                results.append("Ollama 正常")
             }
             if settings.engine != .llm {
                 _ = try await get(settings.systemOneURL, path: "v1/models")
                 results.append("Kev 正常")
             }
             check = .ok(results.joined(separator: "，"))
+        } catch let error as AnalyzerError {
+            check = .failed(error.localizedDescription)
         } catch {
             check = .failed("连不上：\(error.localizedDescription)")
         }
     }
 
-    private func get(_ base: String, path: String) async throws -> Data {
+    private func modelNames(_ base: String, path: String, key: String, field: String) async throws -> [String] {
+        let data = try await get(base, path: path)
+        let list = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?[key] as? [[String: Any]]
+        return list?.compactMap { $0[field] as? String } ?? []
+    }
+
+    private func get(_ base: String, path: String, headers: [String: String] = [:]) async throws -> Data {
         guard let url = URL(string: base)?.appending(path: path) else { throw URLError(.badURL) }
-        let (data, response) = try await URLSession.shared.data(from: url)
-        if let http = response as? HTTPURLResponse, http.statusCode != 200 { throw URLError(.badServerResponse) }
+        var request = URLRequest(url: url, timeoutInterval: 15)
+        headers.forEach { request.setValue($1, forHTTPHeaderField: $0) }
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else {
+            throw AnalyzerError.http(service: URL(string: base)?.host() ?? base, status: status,
+                                     detail: String(decoding: data.prefix(160), as: UTF8.self))
+        }
         return data
     }
 }
