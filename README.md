@@ -27,7 +27,7 @@ EmoLens 是一个开源的 macOS 桌面小工具：像共享屏幕一样实时�
 
 ```bash
 ollama pull qwen3.5:4b          # 默认分析模型，约 3.4 GB
-git clone <本仓库地址> emolens && cd emolens
+git clone https://github.com/timothyzhbw-jpg/emolens.git && cd emolens
 ./scripts/build_app.sh          # 生成 build/EmoLens.app
 open build/EmoLens.app
 ```
