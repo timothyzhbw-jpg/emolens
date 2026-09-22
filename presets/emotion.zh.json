@@ -1,0 +1,87 @@
+{
+  "id": "emotion.zh",
+  "name": "情感分析",
+  "description": "读懂对方最新一条消息背后的情绪和关系信号，给出回应方向。choice 选项的描述以「短标签：解释」书写，界面显示冒号前的短标签。",
+  "titles": {
+    "emotion": "主要情绪",
+    "intensity": "情绪强度",
+    "angry_at_me": "在生我的气",
+    "sarcasm": "反话 / 阴阳怪气",
+    "needs_comfort": "需要安慰",
+    "testing": "在试探我",
+    "cold_distance": "冷淡疏远",
+    "conflict": "冷战 / 分手信号",
+    "manipulation": "情感操控",
+    "self_harm": "自伤风险",
+    "best_response": "建议回应"
+  },
+  "questions": {
+    "emotion": {
+      "type": "choice",
+      "instructions": "对方最新这条消息的主要情绪是什么？结合前面的对话判断。",
+      "criteria": {
+        "joy": "开心：高兴、兴奋、满足、感激",
+        "calm": "平静：语气正常、就事论事，没有明显情绪",
+        "affection": "亲昵：撒娇、想念、爱意、依赖",
+        "sad": "难过：伤心、失落、沮丧、想哭",
+        "hurt": "委屈：觉得被忽视、被误解或受了伤害",
+        "angry": "生气：愤怒、不满、指责、发火",
+        "disappointed": "失望：对我或事情感到失望、灰心",
+        "anxious": "焦虑：担心、紧张、不安、害怕",
+        "cold": "冷淡：敷衍、疏远、爱答不理",
+        "embarrassed": "尴尬：害羞、不好意思、难为情"
+      }
+    },
+    "intensity": {
+      "type": "score",
+      "instructions": "对方最新这条消息的情绪有多强烈？",
+      "criteria": ["几乎没有情绪", "轻微", "明显", "非常强烈"]
+    },
+    "angry_at_me": {
+      "type": "noul",
+      "instructions": "对方是否在生我的气，或者对我有不满？"
+    },
+    "sarcasm": {
+      "type": "noul",
+      "instructions": "对方是否在说反话或阴阳怪气，字面意思和真实想法相反？例如嘴上说「没事」「随便」「你开心就好」，其实心里不满。"
+    },
+    "needs_comfort": {
+      "type": "noul",
+      "instructions": "对方是否希望得到我的安慰、关心或陪伴？"
+    },
+    "testing": {
+      "type": "noul",
+      "instructions": "对方是否在试探我的态度、在意程度或底线？"
+    },
+    "cold_distance": {
+      "type": "noul",
+      "instructions": "对方是否在冷淡、敷衍，或者刻意和我保持距离？"
+    },
+    "conflict": {
+      "type": "noul",
+      "instructions": "对话里是否出现冷战、争吵升级，或者想分手、绝交、结束关系的信号？"
+    },
+    "manipulation": {
+      "type": "noul",
+      "instructions": "对方是否在对我进行情感操控？例如贬低我、威胁我、用愧疚感逼我让步、要求我断绝和别人的来往。"
+    },
+    "self_harm": {
+      "type": "noul",
+      "instructions": "对方是否流露出伤害自己、轻生或不想活下去的念头？"
+    },
+    "best_response": {
+      "type": "choice",
+      "instructions": "针对对方最新这条消息，我现在最合适怎么回应？",
+      "criteria": {
+        "empathize": "安慰共情：先接住对方的情绪，表达理解和心疼",
+        "apologize": "真诚道歉：承认自己做得不好的地方，不找借口",
+        "clarify": "解释澄清：对方有误会，平和地把事情说清楚",
+        "space": "给对方空间：先别追问，等对方情绪平复",
+        "act": "用行动关心：打电话、见面或做点实际的事",
+        "casual": "正常聊天：没什么情绪问题，轻松回应就好",
+        "boundary": "守住边界：对方越界或在操控，温和但坚定地拒绝",
+        "seek_help": "寻求帮助：情况危险，联系对方的亲友或专业心理援助热线"
+      }
+    }
+  }
+}
