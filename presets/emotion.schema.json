@@ -75,6 +75,9 @@
     "self_harm": {
       "type": "boolean"
     },
+    "asks_money": {
+      "type": "boolean"
+    },
     "best_response": {
       "type": "string",
       "enum": [
@@ -85,6 +88,7 @@
         "用行动关心",
         "正常聊天",
         "守住边界",
+        "核实身份",
         "寻求帮助"
       ]
     },
@@ -112,6 +116,7 @@
     "conflict",
     "manipulation",
     "self_harm",
+    "asks_money",
     "best_response",
     "suggested_reply",
     "memory_note"

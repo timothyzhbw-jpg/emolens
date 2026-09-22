@@ -251,7 +251,8 @@ final class Monitor: ObservableObject {
                 let contactMemory = job.contact.map(memory.memory(for:))
                 let summary = settings.useMemory ? contactMemory?.promptSummary() : nil
                 let analyzer = try settings.analyzerConfig().makeAnalyzer(relationship: relationship(for: job.contact), memory: summary)
-                var report = MemoryHints.apply(to: SafetyNet.apply(to: try await analyzer.analyze(context: job.context, latest: job.latest)))
+                let analyzed = try await analyzer.analyze(context: job.context, latest: job.latest)
+                var report = MemoryHints.apply(to: MoneyNet.apply(to: SafetyNet.apply(to: analyzed)))
                 report.contact = job.contact
                 if settings.autoRecordMemory, let contact = job.contact { editMemory(contact) { $0.record(report) } }
                 reports.insert(report, at: 0)

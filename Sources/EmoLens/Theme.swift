@@ -43,6 +43,7 @@ enum Theme {
         case "用行动关心": "phone"
         case "正常聊天": "bubble.left.and.bubble.right"
         case "守住边界": "shield.lefthalf.filled"
+        case "核实身份": "checkmark.shield"
         case "寻求帮助": "lifepreserver"
         default: "lightbulb"
         }
@@ -61,6 +62,7 @@ extension EmotionFlag {
         case .conflict: "heart.slash"
         case .manipulation: "exclamationmark.shield"
         case .selfHarm: "cross.case"
+        case .asksMoney: "creditcard.trianglebadge.exclamationmark"
         }
     }
 
@@ -71,6 +73,7 @@ extension EmotionFlag {
         case .coldDistance, .perfunctory: Color(red: 0.40, green: 0.52, blue: 0.66)
         case .angryAtMe: Color(red: 0.92, green: 0.50, blue: 0.20)
         case .conflict, .manipulation, .selfHarm: Theme.danger
+        case .asksMoney: Color(red: 0.85, green: 0.55, blue: 0.10)
         }
     }
 }

@@ -63,6 +63,7 @@ public enum EmotionFlag: String, CaseIterable, Sendable {
     case conflict
     case manipulation
     case selfHarm = "self_harm"
+    case asksMoney = "asks_money"
 
     public var title: String {
         switch self {
@@ -75,11 +76,12 @@ public enum EmotionFlag: String, CaseIterable, Sendable {
         case .conflict: "冷战 / 分手信号"
         case .manipulation: "情感操控"
         case .selfHarm: "自伤风险"
+        case .asksMoney: "涉及钱或账号"
         }
     }
 
     /// 需要用醒目颜色提醒的信号。
-    public var isSerious: Bool { self == .manipulation || self == .selfHarm || self == .conflict }
+    public var isSerious: Bool { [.manipulation, .selfHarm, .conflict, .asksMoney].contains(self) }
 }
 
 /// 情感分析引擎。

@@ -43,3 +43,28 @@ public enum SafetyNet {
         return report
     }
 }
+
+/// 涉及钱或账号的关键词兜底：冒充熟人借钱、要卡号验证码，小模型和决策模型都会漏（duxin 实测 Kev 只给 0.31）。
+/// 手机密码这类亲密关系里的隐私要求不算在内，交给「情感操控」判断。
+public enum MoneyNet {
+    public static let patterns = [
+        #"转(账|给我|到(这|我|下面|以下))"#, #"打钱"#, #"汇款"#, #"借(我|点)?.{0,4}(钱|块|元|万|\d)"#, #"垫付"#,
+        #"(银行)?卡号"#, #"验证码"#, #"(支付|银行卡|登录|账号|取款)密码"#, #"保证金"#, #"收款码"#, #"刷单"#,
+        #"安全账户"#, #"(?i:gift ?card)"#, #"(?i:wire (me|the) money)"#, #"(?i:verification code)"#,
+    ]
+
+    private static let regex = try! NSRegularExpression(pattern: patterns.map { "(?:\($0))" }.joined(separator: "|"))
+
+    public static func matches(_ text: String) -> Bool {
+        regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
+    }
+
+    /// 命中时把 asks_money 提到 SafetyNet.probability。
+    public static func apply(to report: EmotionReport) -> EmotionReport {
+        guard matches(report.message.text) else { return report }
+        var report = report
+        let key = EmotionFlag.asksMoney.rawValue
+        report.flags[key] = max(report.flags[key] ?? 0, SafetyNet.probability)
+        return report
+    }
+}

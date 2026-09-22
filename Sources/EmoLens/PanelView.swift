@@ -47,7 +47,8 @@ struct PanelView: View {
                 ReportView(report: report,
                            isLatest: report.id == monitor.reports.first?.id,
                            analyzing: monitor.analyzing,
-                           suggestion: suggestion(for: report))
+                           suggestion: suggestion(for: report),
+                           history: signalHistory(for: report))
                     .id(report.id)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             } else {
@@ -72,6 +73,13 @@ struct PanelView: View {
                     settings.relationship = value
                 }
             })
+    }
+
+    /// 这个联系人最近 14 天各信号出现的次数。
+    private func signalHistory(for report: EmotionReport) -> [EmotionFlag: Int] {
+        _ = monitor.memoryVersion
+        guard let contact = report.contact ?? monitor.currentContact else { return [:] }
+        return Dictionary(uniqueKeysWithValues: monitor.contactMemory(contact).counts(days: 14).signals)
     }
 
     private func suggestion(for report: EmotionReport) -> MemorySuggestion? {
@@ -174,6 +182,8 @@ struct ReportView: View {
     let isLatest: Bool
     let analyzing: Bool
     var suggestion: MemorySuggestion? = nil
+    /// 最近 14 天这些信号各出现过几次（来自联系人记忆），用来区分「偶尔一次」和「经常这样」。
+    var history: [EmotionFlag: Int] = [:]
 
     private var selfHarm: Bool { report.activeFlags().contains(.selfHarm) }
     /// 有轻生信号时不显示「情感操控」：给说「我是累赘」的人贴操控标签是有害的，这时先确认 TA 的安全。
@@ -183,13 +193,15 @@ struct ReportView: View {
         VStack(alignment: .leading, spacing: 10) {
             MessageQuote(message: report.message, date: report.date, isLatest: isLatest, analyzing: analyzing)
             if selfHarm { SafetyCard() }
+            if flags.contains(.asksMoney) { MoneyCard() }
             EmotionHero(report: report)
             if !selfHarm, let meaning = report.realMeaning, !meaning.isEmpty {
                 SubtextCard(literal: report.literal, meaning: meaning, consistency: report.consistency)
             }
             if !flags.isEmpty { SignalsCard(flags: flags, probabilities: report.flags) }
+            if !selfHarm, flags.contains(.manipulation) { ManipulationNote(recent: history[.manipulation] ?? 0) }
             if report.bestResponse != nil || report.suggestedReply != nil {
-                SuggestionCard(response: selfHarm ? "先接住 TA" : report.bestResponse, reply: report.suggestedReply)
+                SuggestionCard(response: suggestedResponse, reply: report.suggestedReply)
             }
             if let suggestion { suggestion }
             Text("\(report.engine) · \(String(format: "%.1f", report.latencyMs / 1000)) 秒")
@@ -391,6 +403,53 @@ struct SuggestionCard: View {
         }
         .padding(12)
         .card(tint: Theme.reply)
+    }
+}
+
+extension ReportView {
+    /// 安全优先：有轻生信号时先接住人；涉及钱时先核实身份。
+    var suggestedResponse: String? {
+        if selfHarm { return "先接住 TA" }
+        if flags.contains(.asksMoney) { return "先核实身份" }
+        return report.bestResponse
+    }
+}
+
+/// 涉及钱或账号：盗号后冒充熟人借钱很常见，先核实身份再说。
+struct MoneyCard: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: "creditcard.trianglebadge.exclamationmark")
+                .font(.system(size: 17)).foregroundStyle(EmotionFlag.asksMoney.tint)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("这条消息在要钱或要账号信息").font(.system(size: 13, weight: .semibold))
+                Text("先打电话或当面确认是不是本人。别急着转账，也别发验证码、支付密码和银行卡号。")
+                    .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(11)
+        .card(tint: EmotionFlag.asksMoney.tint)
+    }
+}
+
+/// 情感操控会误判（「反正我也不重要」这种委屈也常被判成操控），文案要做到误判了也不伤人。
+struct ManipulationNote: View {
+    let recent: Int
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.shield").font(.system(size: 12)).foregroundStyle(Theme.danger).padding(.top, 1)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(recent >= 2 ? "这类施压最近 14 天出现了 \(recent) 次" : "这句话可能带有情感施压（偶尔一次不代表什么）")
+                    .font(.system(size: 12, weight: .semibold))
+                Text(recent >= 2
+                     ? "一再让你内疚或妥协不是小事。先照顾好自己的感受，必要时找信任的人聊聊，不必急着让步。"
+                     : "如果只是一时委屈，可以先回应 TA 的情绪；如果 TA 经常这样让你内疚或让步，先照顾好自己，不必急着妥协。")
+                    .font(.system(size: 11.5)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .card(tint: Theme.danger)
     }
 }
 

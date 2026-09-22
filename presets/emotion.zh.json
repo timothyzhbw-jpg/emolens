@@ -1,7 +1,7 @@
 {
   "id": "emotion.zh",
   "name": "情感分析",
-  "description": "读懂对方最新一条消息背后的情绪和关系信号，给出回应方向。choice 选项的描述以「短标签：解释」书写，界面显示冒号前的短标签。",
+  "description": "读懂对方最新一条消息背后的情绪和关系信号，给出回应方向。choice 选项的描述以「短标签：解释」书写，界面显示冒号前的短标签。 反话不直接问（Kev 只会回答两段式问题的后半句），而是问可观察的 says_fine，再按规则推出：says_fine ≥ 0.5 且情绪不是开心 / 亲昵。",
   "titles": {
     "emotion": "主要情绪",
     "intensity": "情绪强度",
@@ -14,7 +14,9 @@
     "conflict": "冷战 / 分手信号",
     "manipulation": "情感操控",
     "self_harm": "自伤风险",
-    "best_response": "建议回应"
+    "asks_money": "涉及钱或账号",
+    "best_response": "建议回应",
+    "says_fine": "说了没事 / 随便"
   },
   "questions": {
     "emotion": {
@@ -47,9 +49,9 @@
       "type": "noul",
       "instructions": "对方是否在生我的气，或者对我有不满？"
     },
-    "sarcasm": {
+    "says_fine": {
       "type": "noul",
-      "instructions": "对方是否在说反话或阴阳怪气，字面意思和真实想法相反？例如嘴上说「没事」「随便」「你开心就好」，其实心里不满。"
+      "instructions": "对方是不是说了「没事」「随便」「都行」「你开心就好」「都听你的」这类表示无所谓的话？"
     },
     "perfunctory": {
       "type": "noul",
@@ -79,6 +81,10 @@
       "type": "noul",
       "instructions": "对方是否流露出伤害自己、轻生或不想活下去的念头？"
     },
+    "asks_money": {
+      "type": "noul",
+      "instructions": "这条消息是不是在向我要钱、让我转账付款，或者索要银行卡号、验证码、密码？"
+    },
     "best_response": {
       "type": "choice",
       "instructions": "针对对方最新这条消息，我现在最合适怎么回应？",
@@ -90,6 +96,7 @@
         "act": "用行动关心：打电话、见面或做点实际的事",
         "casual": "正常聊天：没什么情绪问题，轻松回应就好",
         "boundary": "守住边界：对方越界或在操控，温和但坚定地拒绝",
+        "verify": "核实身份：涉及钱或账号，先打电话或当面确认是本人",
         "seek_help": "寻求帮助：情况危险，联系对方的亲友或专业心理援助热线"
       }
     }

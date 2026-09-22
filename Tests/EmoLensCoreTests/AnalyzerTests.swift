@@ -97,7 +97,9 @@ final class AnalyzerTests: XCTestCase {
             XCTAssertNotNil(example.answer["suggested_reply"], example.chat)
         }
         let preset = try SystemOnePreset.load(from: presets.appending(path: "emotion.zh.json"))
-        for flag in EmotionFlag.allCases {
+        // 反话不直接问，改问可观察的 says_fine 再按规则推出。
+        XCTAssertNotNil(preset.questions["says_fine"])
+        for flag in EmotionFlag.allCases where flag != .sarcasm {
             XCTAssertNotNil(preset.questions[flag.rawValue], "Kev 问题集缺少 \(flag.rawValue)")
         }
     }
@@ -139,6 +141,50 @@ final class SafetyNetTests: XCTestCase {
         XCTAssertEqual(SafetyNet.apply(to: low).flags["self_harm"], SafetyNet.probability)
         let high = EmotionReport(message: message, emotion: "难过", intensity: 3, flags: ["self_harm": 1], engine: "t", latencyMs: 0)
         XCTAssertEqual(SafetyNet.apply(to: high).flags["self_harm"], 1)
+    }
+}
+
+final class MoneyNetTests: XCTestCase {
+    private func report(_ text: String, money: Double = 0) -> EmotionReport {
+        EmotionReport(message: ChatMessage(speaker: .them, text: text, top: 0), emotion: "平静", intensity: 0,
+                      flags: ["asks_money": money], engine: "t", latencyMs: 0)
+    }
+
+    func testCatchesMoneyAndAccountRequests() {
+        for text in ["能不能先借我 3000，明天还你", "直接转这个卡号 6222 0000 1234 5678", "把验证码发我一下",
+                     "先垫付一下运费", "你的支付密码是多少", "转账给我就行", "先交个保证金才能提现"] {
+            XCTAssertTrue(MoneyNet.matches(text), text)
+        }
+        XCTAssertEqual(MoneyNet.apply(to: report("先借我 500 应应急")).flags["asks_money"], SafetyNet.probability)
+        XCTAssertEqual(MoneyNet.apply(to: report("借我 500", money: 1)).flags["asks_money"], 1, "不覆盖模型更高的判断")
+    }
+
+    func testIgnoresEverydayTalk() {
+        for text in ["把你手机密码告诉我，不然就是心里有鬼", "借我充电宝用一下", "群里发红包了快抢", "这个月工资还没发"] {
+            XCTAssertFalse(MoneyNet.matches(text), text)
+        }
+    }
+}
+
+final class SaysFineRuleTests: XCTestCase {
+    private func analyze(saysFine: Double, emotion: String) -> EmotionReport {
+        let preset = SystemOnePreset(questions: [
+            "emotion": ["type": "choice", "criteria": ["hurt": "委屈：被忽视", "joy": "开心：高兴"]],
+        ])
+        let answers: [String: [String: Any]] = [
+            "emotion": ["choice": emotion, "probabilities": [emotion: 0.8]],
+            "says_fine": ["noul": saysFine],
+        ]
+        return SystemOneAnalyzer(preset: preset).report(answers: answers, message: ChatMessage(speaker: .them, text: "没事", top: 0), latencyMs: 1)
+    }
+
+    func testSaysFineWithNegativeEmotionMeansSarcasm() {
+        XCTAssertEqual(analyze(saysFine: 0.9, emotion: "hurt").flags["sarcasm"], 0.9)
+    }
+
+    func testSaysFineWhileHappyIsNotSarcasm() {
+        XCTAssertEqual(analyze(saysFine: 0.9, emotion: "joy").flags["sarcasm"], 0)
+        XCTAssertEqual(analyze(saysFine: 0.2, emotion: "hurt").flags["sarcasm"], 0)
     }
 }
 

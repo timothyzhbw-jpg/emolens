@@ -58,6 +58,12 @@ public struct SystemOneAnalyzer: EmotionAnalyzer {
         for flag in EmotionFlag.allCases {
             flags[flag.rawValue] = (answers[flag.rawValue]?["noul"] as? NSNumber)?.doubleValue ?? 0
         }
+        // 反话不直接问：决策模型对「嘴上说没事、心里其实生气吗」只会答后半句（duxin 实测 34%）。
+        // 改成问可观察的 says_fine，再按规则推出（同一测试 98%）。
+        if let saysFine = (answers["says_fine"]?["noul"] as? NSNumber)?.doubleValue {
+            let positive = ["joy", "affection"].contains(emotionKey)
+            flags[EmotionFlag.sarcasm.rawValue] = saysFine >= 0.5 && !positive ? saysFine : 0
+        }
         let responseKey = answers["best_response"]?["choice"] as? String
         return EmotionReport(
             message: message,
@@ -82,7 +88,7 @@ extension SystemOnePreset {
 /// 双引擎：生成式模型读潜台词、写回复；决策模型并行判严重信号，两者取较高的概率。
 /// 决策模型失败时退回单引擎结果。
 public struct CombinedAnalyzer: EmotionAnalyzer {
-    public static let seriousFlags: [EmotionFlag] = [.angryAtMe, .conflict, .manipulation, .selfHarm]
+    public static let seriousFlags: [EmotionFlag] = [.angryAtMe, .conflict, .manipulation, .selfHarm, .asksMoney]
 
     public var primary: EmotionAnalyzer
     public var checker: EmotionAnalyzer

@@ -19,6 +19,19 @@ enum EmoLensMain {
                 exit(1)
             }
         }
+        // EmoLens --eval 输入.jsonl 输出.jsonl：批量分析，用来跑评测集。
+        if let i = args.firstIndex(of: "--eval"), i + 2 < args.count {
+            _ = NSApplication.shared
+            let semaphore = DispatchSemaphore(value: 0)
+            // 必须脱离主线程：main() 是 @MainActor，普通 Task 会继承它，和下面的 wait() 互相等待造成死锁。
+            Task.detached {
+                do { try await EvalRunner.run(input: URL(fileURLWithPath: args[i + 1]), output: URL(fileURLWithPath: args[i + 2])) }
+                catch { FileHandle.standardError.write(Data("eval failed: \(error)\n".utf8)) }
+                semaphore.signal()
+            }
+            semaphore.wait()
+            exit(0)
+        }
         let app = NSApplication.shared
         app.delegate = delegate
         app.setActivationPolicy(.regular)
