@@ -85,7 +85,7 @@ KEV_DTYPE=bf16 KEV_MERGE=0 uv run --extra serve python -m kev.serve --run jaredp
 - **只看得到屏幕上的内容**：文字识别依赖框选的区域。图片、表情包、语音不会被分析；群聊昵称的识别是启发式的。
 - **只分析对方最新的一条**，上下文取最近约 10 条。切换聊天或往上翻页时会重新对齐。
 - **模型会犯错**：尤其是 4B 小模型，同一句话两次的结果可能不同。重要的判断请结合原话和你对对方的了解。
-- 用 `build_app.sh` 做的是 ad-hoc 签名，每次重新构建后，macOS 可能要求重新授予屏幕录制权限。
+- 没有创建 `EmoLens Local` 签名证书时，`build_app.sh` 只能做 ad-hoc 签名，每次重新构建后都要重新授予屏幕录制权限（见「快速开始」）。
 - 目前只针对 Mac 版微信的布局调过参数；其他聊天软件只要是「对方靠左、我靠右」的布局，通常也能用。
 
 <p align="center"><img src="docs/screenshots/safety.png" width="300" alt="自伤风险提醒"></p>
