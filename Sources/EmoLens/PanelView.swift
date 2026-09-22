@@ -11,6 +11,7 @@ struct PanelView: View {
     @State private var memoryContact: String?
     @State private var selectedID: UUID?
     @State private var handledSuggestions: Set<UUID> = []
+    @State private var transcript = ""
 
     private var shown: EmotionReport? {
         monitor.reports.first { $0.id == selectedID } ?? monitor.reports.first
@@ -18,7 +19,9 @@ struct PanelView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PanelHeader(monitor: monitor, openSettings: { showSettings = true })
+            PanelHeader(monitor: monitor, manual: settings.manualMode, openSettings: { showSettings = true })
+            ModeSwitch(monitor: monitor, manual: $settings.manualMode)
+                .padding(.horizontal, 14).padding(.bottom, 8)
             ContactBar(monitor: monitor) { memoryContact = monitor.currentContact }
                 .padding(.horizontal, 14).padding(.bottom, 8)
             RelationshipBar(selection: relationship)
@@ -43,6 +46,9 @@ struct PanelView: View {
     private var content: some View {
         VStack(spacing: 12) {
             Notices(monitor: monitor)
+            if settings.manualMode {
+                ManualView(monitor: monitor, settings: settings, transcript: $transcript, editable: scrolls)
+            }
             if let report = shown {
                 ReportView(report: report,
                            isLatest: report.id == monitor.reports.first?.id,
@@ -104,6 +110,7 @@ struct ContactID: Identifiable {
 
 struct PanelHeader: View {
     @ObservedObject var monitor: Monitor
+    var manual = false
     let openSettings: () -> Void
 
     var body: some View {
@@ -122,9 +129,11 @@ struct PanelHeader: View {
                 }
             }
             Spacer(minLength: 8)
-            IconButton(symbol: monitor.isRunning ? "pause.fill" : "play.fill",
-                       help: monitor.isRunning ? "暂停" : "开始") {
-                monitor.isRunning ? monitor.pause() : monitor.start()
+            if !manual {
+                IconButton(symbol: monitor.isRunning ? "pause.fill" : "play.fill",
+                           help: monitor.isRunning ? "暂停" : "开始") {
+                    monitor.isRunning ? monitor.pause() : monitor.start()
+                }
             }
             IconButton(symbol: "slider.horizontal.3", help: "设置", action: openSettings)
         }
@@ -134,16 +143,18 @@ struct PanelHeader: View {
     }
 
     private var statusText: String {
-        if monitor.analyzing { return "正在读 TA 的新消息…" }
+        if monitor.analyzing { return "正在分析…" }
+        if manual { return "手动模式 · 不截屏" }
         if monitor.status == .watching, !monitor.windowName.isEmpty { return "正在看 · \(monitor.windowName)" }
         return monitor.status.text
     }
 
     private var statusColor: Color {
+        if manual { return .purple }
         switch monitor.status {
-        case .watching: monitor.analyzing ? .blue : .green
-        case .paused: .gray
-        default: .orange
+        case .watching: return monitor.analyzing ? .blue : .green
+        case .paused: return .gray
+        default: return .orange
         }
     }
 }

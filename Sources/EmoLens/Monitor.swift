@@ -261,6 +261,17 @@ final class Monitor: ObservableObject {
         log.notice("ollama: \(String(describing: status), privacy: .public)")
     }
 
+    /// 手动模式：分析粘贴进来的聊天记录，取其中对方最后说的那条。
+    func analyzeManual(_ transcript: String) {
+        let parsed = ChatTranscript.parse(transcript)
+        guard let index = parsed.messages.lastIndex(where: { $0.speaker == .them }) else { return }
+        let latest = parsed.messages[index]
+        let context = Array(parsed.messages[..<index].suffix(10))
+        analysisError = nil
+        pending = (context, latest, manualContact ?? latest.sender)
+        if !analyzing { Task { await drain() } }
+    }
+
     /// 一次只分析一条；分析期间来的新消息只保留最新的一条。
     private func drain() async {
         analyzing = true

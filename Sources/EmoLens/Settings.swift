@@ -64,6 +64,8 @@ final class AppSettings: ObservableObject {
     /// 分析时参考联系人记忆；把分析结果自动记进联系人记忆。
     /// 本地模型没在跑时自动执行 ollama serve（只对本机地址生效；永远不会自动改用云端模型）。
     @Published var autoStartOllama: Bool { didSet { defaults.set(autoStartOllama, forKey: "autoStartOllama") } }
+    /// 手动模式：粘贴聊天记录分析，不截屏。
+    @Published var manualMode: Bool { didSet { defaults.set(manualMode, forKey: "manualMode") } }
     @Published var useMemory: Bool { didSet { defaults.set(useMemory, forKey: "useMemory") } }
     @Published var autoRecordMemory: Bool { didSet { defaults.set(autoRecordMemory, forKey: "autoRecordMemory") } }
     @Published var windowID: CGWindowID { didSet { defaults.set(Int(windowID), forKey: "windowID") } }
@@ -87,6 +89,7 @@ final class AppSettings: ObservableObject {
         relationship = defaults.string(forKey: "relationship") ?? "不确定"
         interval = defaults.object(forKey: "interval") as? Double ?? 1.5
         autoStartOllama = defaults.object(forKey: "autoStartOllama") as? Bool ?? true
+        manualMode = defaults.bool(forKey: "manualMode")
         useMemory = defaults.object(forKey: "useMemory") as? Bool ?? true
         autoRecordMemory = defaults.object(forKey: "autoRecordMemory") as? Bool ?? true
         windowID = CGWindowID(defaults.integer(forKey: "windowID"))

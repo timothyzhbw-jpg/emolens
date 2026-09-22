@@ -25,6 +25,17 @@ enum PreviewRenderer {
         }
         for dark in [false, true] {
             let monitor = Monitor(settings: settings, memory: memory)
+            monitor.loadPreview(status: .paused, reports: [Sample.manual])
+            let sample = "小美：没事，你忙你的\n我：晚点补给你好不好\n小美 21:40\n算了，你开心就好"
+            let url = directory.appending(path: "manual\(dark ? "-dark" : "").png")
+            try render(VStack(spacing: 12) {
+                ManualView(monitor: monitor, settings: settings, transcript: .constant(sample), editable: false)
+                ReportView(report: Sample.manual, isLatest: true, analyzing: false)
+            }.padding(14), dark: dark, to: url)
+            print(url.path)
+        }
+        for dark in [false, true] {
+            let monitor = Monitor(settings: settings, memory: memory)
             let url = directory.appending(path: "memory-sheet\(dark ? "-dark" : "").png")
             try render(MemoryView(monitor: monitor, settings: settings, contact: "小美", scrolls: false), dark: dark, to: url, width: 420)
             print(url.path)
@@ -134,6 +145,15 @@ enum Sample {
         literal: "告诉我密码才算在乎我", meaning: "用「在不在乎」逼你交出隐私，想掌控你的生活",
         reply: "我在乎你，也愿意聊聊你为什么不安。但手机是我的隐私，我们换个方式建立信任好吗？",
         engine: "\(llm) + 决策模型 · Kev", latency: 4200)
+
+    static var manual: EmotionReport {
+        var r = report("算了，你开心就好", emotion: "失望", intensity: 2, flags: [.angryAtMe: 1, .sarcasm: 1, .needsComfort: 1],
+                       response: "真诚道歉", consistency: "反话", literal: "算了，你开心就好",
+                       meaning: "等了很久没等到答复，已经不想再争，但心里在意",
+                       reply: "对不起，是我一直拖着。现在就给你打电话，好不好？")
+        r.contact = "小美"
+        return r
+    }
 
     static let selfHarm = report(
         "有时候觉得我消失了也不会有人在意吧", emotion: "难过", intensity: 3,
