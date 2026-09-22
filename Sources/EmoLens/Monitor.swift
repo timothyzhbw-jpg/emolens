@@ -1,7 +1,10 @@
 import CoreGraphics
 import EmoLensCore
 import Foundation
+import OSLog
 import ScreenCaptureKit
+
+private let log = Logger(subsystem: "io.github.emolens", category: "monitor")
 
 /// 截图 → OCR → 解析消息 → 发现对方新消息 → 分析。整个循环跑在主 actor 上，重活放到后台。
 @MainActor
@@ -76,6 +79,7 @@ final class Monitor: ObservableObject {
     private func tick() async {
         do {
             guard let window = try await WindowCapture.find(id: settings.windowID) else {
+                if status != .noWindow { log.info("window not found, id=\(self.settings.windowID)") }
                 status = .noWindow
                 return
             }
@@ -88,24 +92,32 @@ final class Monitor: ObservableObject {
                   let current = FrameSignature(chat), current.differs(from: signature) else { return }
             signature = current
             let lines = try await Task.detached(priority: .userInitiated) { try TextRecognizer.recognize(chat) }.value
-            handle(tracker.update(ChatParser.parse(lines)))
+            let messages = ChatParser.parse(lines)
+            let them = messages.filter { $0.speaker == .them }.count
+            log.info("frame changed: \(chat.width)x\(chat.height)px, \(lines.count) OCR lines, \(messages.count) messages (\(them) from them)")
+            handle(tracker.update(messages))
         } catch {
+            log.error("tick failed: \(error.localizedDescription, privacy: .public)")
             status = Self.isPermissionError(error) ? .needsPermission : .failed(error.localizedDescription)
         }
     }
 
     private func handle(_ event: TrackerEvent) {
+        let messages: [ChatMessage]
         switch event {
-        case .unchanged: break
-        case .appended(let messages), .reset(let messages):
-            if let latest = messages.last(where: { $0.speaker == .them }) { enqueue(latest) }
+        case .unchanged: return
+        case .appended(let new): messages = new
+        case .reset(let visible): messages = visible
         }
+        log.info("tracker \(String(describing: event).prefix(8), privacy: .public): \(messages.count) messages")
+        if let latest = messages.last(where: { $0.speaker == .them }) { enqueue(latest) }
     }
 
     private func enqueue(_ latest: ChatMessage) {
         let context = contextBefore(latest)
         let key = MessageTracker.normalize((context.last?.text ?? "") + "|" + latest.text)
         guard !analyzedKeys.contains(key) else { return }
+        log.info("queue analysis: \(latest.text, privacy: .private)")
         analyzedKeys = Array((analyzedKeys + [key]).suffix(100))
         pending = (context, latest)
         if !analyzing { Task { await drain() } }
@@ -129,7 +141,9 @@ final class Monitor: ObservableObject {
                 Self.debugLog(report)
                 reports = Array(reports.prefix(30))
                 analysisError = nil
+                log.info("analysis done in \(Int(report.latencyMs)) ms by \(report.engine, privacy: .public)")
             } catch {
+                log.error("analysis failed: \(error.localizedDescription, privacy: .public)")
                 analysisError = error.localizedDescription
             }
         }

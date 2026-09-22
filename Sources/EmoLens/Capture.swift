@@ -15,10 +15,10 @@ enum WindowCapture {
         }
     }
 
-    /// 指定的窗口；没指定或已关闭时，取最大的微信窗口。
+    /// 指定了窗口就只找它（找不到返回 nil，不偷偷换成别的窗口）；没指定时取最大的微信窗口。
     static func find(id: CGWindowID) async throws -> SCWindow? {
         let all = try await windows()
-        if id != 0, let window = all.first(where: { $0.windowID == id }) { return window }
+        if id != 0 { return all.first { $0.windowID == id } }
         return all
             .filter { $0.owningApplication?.bundleIdentifier == weChatBundleID }
             .max { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }
