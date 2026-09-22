@@ -169,7 +169,7 @@ final class Monitor: ObservableObject {
             switch try await WindowCapture.find(id: settings.windowID) {
             case .found(let found): window = found
             case .hidden(let name):
-                if status != .windowHidden(name) { log.notice("window hidden: \(name, privacy: .public)") }
+                if status != .windowHidden(name) { log.notice("window hidden: \(name, privacy: .private)") }
                 status = .windowHidden(name)
                 return
             case .missing:
@@ -220,7 +220,8 @@ final class Monitor: ObservableObject {
         case .appended(let new): messages = new
         case .reset(let visible): messages = visible
         }
-        log.notice("tracker \(String(describing: event).prefix(8), privacy: .public): \(messages.count) messages")
+        let kind = if case .reset = event { "reset" } else { "appended" }
+        log.notice("tracker \(kind, privacy: .public): \(messages.count) messages")
         if let latest = messages.last(where: { $0.speaker == .them }) { enqueue(latest) }
     }
 
@@ -260,7 +261,8 @@ final class Monitor: ObservableObject {
                 failed = nil
                 log.notice("analysis done in \(Int(report.latencyMs)) ms by \(report.engine, privacy: .public)")
             } catch {
-                log.error("analysis failed: \(error.localizedDescription, privacy: .public)")
+                // 错误信息里可能带着模型输出（即聊天内容），只公开类别，细节标为隐私。
+                log.error("analysis failed: \(Self.category(error), privacy: .public) \(error.localizedDescription, privacy: .private)")
                 analysisError = describe(error)
                 failed = job
             }
@@ -293,6 +295,17 @@ final class Monitor: ObservableObject {
             return "分析超时了：模型可能还在加载，或者内存不够。稍后点「重试」。"
         default:
             return error.localizedDescription
+        }
+    }
+
+    /// 可以公开写进系统日志的错误类别（不含任何聊天内容）。
+    static func category(_ error: Error) -> String {
+        switch error {
+        case AnalyzerError.badResponse: "bad_response"
+        case AnalyzerError.refused: "refused"
+        case AnalyzerError.http(let service, let status, _): "http \(status) from \(service)"
+        case let error as URLError: "url_error \(error.code.rawValue)"
+        default: String(describing: type(of: error))
         }
     }
 
