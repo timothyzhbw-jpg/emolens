@@ -61,6 +61,9 @@ final class AppSettings: ObservableObject {
     @Published var anthropicKey: String { didSet { Keychain.save(anthropicKey, for: "anthropic") } }
     @Published var relationship: String { didSet { defaults.set(relationship, forKey: "relationship") } }
     @Published var interval: Double { didSet { defaults.set(interval, forKey: "interval") } }
+    /// 分析时参考联系人记忆；把分析结果自动记进联系人记忆。
+    @Published var useMemory: Bool { didSet { defaults.set(useMemory, forKey: "useMemory") } }
+    @Published var autoRecordMemory: Bool { didSet { defaults.set(autoRecordMemory, forKey: "autoRecordMemory") } }
     @Published var windowID: CGWindowID { didSet { defaults.set(Int(windowID), forKey: "windowID") } }
     @Published var region: CGRect {
         didSet { defaults.set([region.minX, region.minY, region.width, region.height], forKey: "region") }
@@ -81,6 +84,8 @@ final class AppSettings: ObservableObject {
         anthropicKey = Keychain.read("anthropic")
         relationship = defaults.string(forKey: "relationship") ?? "不确定"
         interval = defaults.object(forKey: "interval") as? Double ?? 1.5
+        useMemory = defaults.object(forKey: "useMemory") as? Bool ?? true
+        autoRecordMemory = defaults.object(forKey: "autoRecordMemory") as? Bool ?? true
         windowID = CGWindowID(defaults.integer(forKey: "windowID"))
         // 兼容数字被存成字符串的情况（例如用 defaults write 命令写入）。
         let r = (defaults.array(forKey: "region") ?? []).compactMap { ($0 as? NSNumber)?.doubleValue ?? Double("\($0)") }
@@ -129,9 +134,6 @@ final class AppSettings: ObservableObject {
         return config
     }
 
-    func makeAnalyzer() throws -> EmotionAnalyzer {
-        try analyzerConfig().makeAnalyzer(relationship: relationship)
-    }
 
     private func url(_ text: String) throws -> URL {
         guard let url = URL(string: text.trimmingCharacters(in: .whitespaces)), url.host() != nil else {

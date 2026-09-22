@@ -32,16 +32,60 @@ final class Monitor: ObservableObject {
     @Published private(set) var windowName = ""
 
     let settings: AppSettings
+    let memory: ContactMemoryStore
+    /// 从标题栏认出来的对方名字；换聊天时会变。
+    @Published private(set) var detectedContact: String?
+    /// 用户手动设置的名字，只对当前这个聊天有效。
+    @Published var manualContact: String?
+    /// 记忆有改动时加一，让界面刷新。
+    @Published private(set) var memoryVersion = 0
     private var tracker = MessageTracker()
     private var loop: Task<Void, Never>?
     private var signature: FrameSignature?
-    private var pending: (context: [ChatMessage], latest: ChatMessage)?
-    private var failed: (context: [ChatMessage], latest: ChatMessage)?
+    private typealias Job = (context: [ChatMessage], latest: ChatMessage, contact: String?)
+    private var pending: Job?
+    private var failed: Job?
     private var previewRunning = false
     private var analyzedKeys: [String] = []
+    /// 被监控窗口自己的应用名和标题（识别联系人时排除）。
+    private var windowTitles: [String] = []
 
-    init(settings: AppSettings) {
+    init(settings: AppSettings, memory: ContactMemoryStore = ContactMemoryStore()) {
         self.settings = settings
+        self.memory = memory
+    }
+
+    var currentContact: String? { manualContact ?? detectedContact }
+
+    // MARK: - 联系人记忆
+
+    func contactMemory(_ name: String) -> ContactMemory { memory.memory(for: name) }
+
+    func editMemory(_ name: String, _ change: (inout ContactMemory) -> Void) {
+        memory.update(name, change)
+        memoryVersion += 1
+    }
+
+    /// 用户确认记住 AI 建议的事。
+    func remember(_ text: String, for name: String, source: ContactMemory.Note.Source = .ai) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        editMemory(name) { $0.notes.append(.init(text: trimmed, source: source)) }
+    }
+
+    func forget(_ name: String) {
+        memory.forget(name)
+        memoryVersion += 1
+    }
+
+    func forgetAll() {
+        memory.forgetAll()
+        memoryVersion += 1
+    }
+
+    /// 当前聊天对象的关系：先看联系人记忆里设的，没有就用面板上的全局选择。
+    func relationship(for contact: String?) -> String {
+        contact.flatMap { memory.memory(for: $0).relationship } ?? settings.relationship
     }
 
     var isRunning: Bool { loop != nil || previewRunning }
@@ -109,8 +153,9 @@ final class Monitor: ObservableObject {
         self.windowName = windowName
         self.analysisError = error
         self.preview = preview
+        self.detectedContact = reports.first?.contact
         self.previewRunning = status == .watching
-        if error != nil { failed = ([], ChatMessage(speaker: .them, text: "", top: 0)) }
+        if error != nil { failed = ([], ChatMessage(speaker: .them, text: "", top: 0), nil) }
     }
 
     func clearHistory() {
@@ -134,6 +179,7 @@ final class Monitor: ObservableObject {
                 return
             }
             windowName = WindowCapture.name(of: window)
+            windowTitles = [window.owningApplication?.applicationName, window.title].compactMap { $0 }
             let frame = try await WindowCapture.capture(window)
             preview = frame
             status = .watching
@@ -144,10 +190,26 @@ final class Monitor: ObservableObject {
             let messages = ChatParser.parse(lines)
             let them = messages.filter { $0.speaker == .them }.count
             log.notice("frame changed: \(chat.width)x\(chat.height)px, \(lines.count) OCR lines, \(messages.count) messages (\(them) from them)")
-            handle(tracker.update(messages))
+            let event = tracker.update(messages)
+            if case .reset = event { await detectContact(in: frame) } else if detectedContact == nil { await detectContact(in: frame) }
+            handle(event)
         } catch {
             log.error("tick failed: \(error.localizedDescription, privacy: .public)")
             status = Self.isPermissionError(error) ? .needsPermission : .failed(error.localizedDescription)
+        }
+    }
+
+    /// 读聊天区域上方的标题栏，认出对方名字。换了人就清掉手动设置的名字。
+    private func detectContact(in frame: CGImage) async {
+        guard let rect = WindowCapture.headerRegion(above: settings.region),
+              let header = WindowCapture.crop(frame, to: rect),
+              let lines = try? await Task.detached(priority: .utility, operation: { try TextRecognizer.recognize(header) }).value
+        else { return }
+        let name = ContactNameDetector.detect(lines, excluding: windowTitles)
+        if name != detectedContact {
+            log.notice("contact changed: \(name ?? "nil", privacy: .private)")
+            detectedContact = name
+            manualContact = nil
         }
     }
 
@@ -168,7 +230,7 @@ final class Monitor: ObservableObject {
         guard !analyzedKeys.contains(key) else { return }
         log.notice("queue analysis: \(latest.text, privacy: .private)")
         analyzedKeys = Array((analyzedKeys + [key]).suffix(100))
-        pending = (context, latest)
+        pending = (context, latest, currentContact)
         if !analyzing { Task { await drain() } }
     }
 
@@ -185,7 +247,12 @@ final class Monitor: ObservableObject {
         while let job = pending {
             pending = nil
             do {
-                let report = SafetyNet.apply(to: try await settings.makeAnalyzer().analyze(context: job.context, latest: job.latest))
+                let contactMemory = job.contact.map(memory.memory(for:))
+                let summary = settings.useMemory ? contactMemory?.promptSummary() : nil
+                let analyzer = try settings.analyzerConfig().makeAnalyzer(relationship: relationship(for: job.contact), memory: summary)
+                var report = MemoryHints.apply(to: SafetyNet.apply(to: try await analyzer.analyze(context: job.context, latest: job.latest)))
+                report.contact = job.contact
+                if settings.autoRecordMemory, let contact = job.contact { editMemory(contact) { $0.record(report) } }
                 reports.insert(report, at: 0)
                 Self.debugLog(report)
                 reports = Array(reports.prefix(30))

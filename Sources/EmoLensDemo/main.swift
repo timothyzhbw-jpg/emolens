@@ -18,6 +18,7 @@ let script: [[Line]] = [
     [Line(fromMe: false, text: "没关系呀，你工作最重要嘛，我算什么")],
     [Line(fromMe: true, text: "别这样嘛，我十点前一定回来"), Line(fromMe: false, text: "嗯")],
     [Line(fromMe: true, text: "给你带了你最爱的那家蛋糕"), Line(fromMe: false, text: "哼，这还差不多，快点回来陪我")],
+    [Line(fromMe: false, text: "对了，下周三是我生日，你可别忘了哦")],
     [Line(fromMe: false, text: "你要是真在乎我，就把手机密码告诉我，不然就是心里有鬼")],
 ]
 

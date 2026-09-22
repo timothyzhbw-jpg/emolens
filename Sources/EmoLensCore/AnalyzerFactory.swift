@@ -53,27 +53,28 @@ public struct AnalyzerConfig: Sendable {
 
     public init() {}
 
-    public func makeAnalyzer(engine: Engine? = nil, relationship: String? = nil) throws -> EmotionAnalyzer {
+    /// memory 为联系人记忆摘要（ContactMemory.promptSummary），会写进给模型的上下文。
+    public func makeAnalyzer(engine: Engine? = nil, relationship: String? = nil, memory: String? = nil) throws -> EmotionAnalyzer {
         switch engine ?? self.engine {
         case .llm:
-            return try llmAnalyzer(relationship)
+            return try llmAnalyzer(relationship, memory)
         case .combined:
-            return CombinedAnalyzer(primary: try llmAnalyzer(relationship),
-                                    checker: try systemOne(relationship, only: CombinedAnalyzer.seriousFlags.map(\.rawValue)))
+            return CombinedAnalyzer(primary: try llmAnalyzer(relationship, memory),
+                                    checker: try systemOne(relationship, memory, only: CombinedAnalyzer.seriousFlags.map(\.rawValue)))
         case .systemOne:
-            return try systemOne(relationship)
+            return try systemOne(relationship, memory)
         }
     }
 
-    private func llmAnalyzer(_ relationship: String?) throws -> LLMAnalyzer {
+    private func llmAnalyzer(_ relationship: String?, _ memory: String?) throws -> LLMAnalyzer {
         let prompt = try LLMPrompt.load(from: presets.appending(path: "emotion.llm.zh.json"))
-        return LLMAnalyzer(backend: llm.backend(), prompt: prompt, relationship: relationship)
+        return LLMAnalyzer(backend: llm.backend(), prompt: prompt, relationship: relationship, memory: memory)
     }
 
-    private func systemOne(_ relationship: String?, only ids: [String]? = nil) throws -> SystemOneAnalyzer {
+    private func systemOne(_ relationship: String?, _ memory: String?, only ids: [String]? = nil) throws -> SystemOneAnalyzer {
         var preset = try SystemOnePreset.load(from: presets.appending(path: "emotion.zh.json"))
         if let ids { preset = preset.subset(ids) }
-        return SystemOneAnalyzer(baseURL: systemOneURL, preset: preset, relationship: relationship)
+        return SystemOneAnalyzer(baseURL: systemOneURL, preset: preset, relationship: relationship, memory: memory)
     }
 }
 

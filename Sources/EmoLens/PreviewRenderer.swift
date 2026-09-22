@@ -9,23 +9,34 @@ enum PreviewRenderer {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let settings = AppSettings()
         settings.relationship = "恋人"
+        // 用临时文件里的示例记忆，绝不碰用户真实的记忆。
+        let memoryURL = FileManager.default.temporaryDirectory.appending(path: "emolens-preview-\(UUID()).json")
+        defer { try? FileManager.default.removeItem(at: memoryURL) }
+        let memory = ContactMemoryStore(fileURL: memoryURL)
+        Sample.fillMemory(memory)
         for (name, setup) in scenarios {
             for dark in [false, true] {
-                let monitor = Monitor(settings: settings)
+                let monitor = Monitor(settings: settings, memory: memory)
                 setup(monitor)
                 let url = directory.appending(path: "\(name)\(dark ? "-dark" : "").png")
                 try render(PanelView(monitor: monitor, settings: settings, scrolls: false), dark: dark, to: url)
                 print(url.path)
             }
         }
+        for dark in [false, true] {
+            let monitor = Monitor(settings: settings, memory: memory)
+            let url = directory.appending(path: "memory-sheet\(dark ? "-dark" : "").png")
+            try render(MemoryView(monitor: monitor, settings: settings, contact: "小美", scrolls: false), dark: dark, to: url, width: 420)
+            print(url.path)
+        }
     }
 
-    private static func render(_ view: some View, dark: Bool, to url: URL) throws {
+    private static func render(_ view: some View, dark: Bool, to url: URL, width: CGFloat = 372) throws {
         let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)!
         var image: CGImage?
         appearance.performAsCurrentDrawingAppearance {
             let content = view
-                .frame(width: 372)
+                .frame(width: width)
                 .background(Color(nsColor: .windowBackgroundColor))
                 .environment(\.colorScheme, dark ? .dark : .light)
             let renderer = ImageRenderer(content: content)
@@ -40,6 +51,7 @@ enum PreviewRenderer {
 
     private static let scenarios: [(String, (Monitor) -> Void)] = [
         ("report", { $0.loadPreview(status: .watching, reports: [Sample.sarcasm, Sample.coy, Sample.perfunctory]) }),
+        ("memory", { $0.loadPreview(status: .watching, reports: [Sample.withMemoryNote, Sample.coy]) }),
         ("manipulation", { $0.loadPreview(status: .watching, reports: [Sample.manipulation, Sample.sarcasm]) }),
         ("safety", { $0.loadPreview(status: .watching, reports: [Sample.selfHarm]) }),
         ("analyzing", { $0.loadPreview(status: .watching, reports: [Sample.coy], analyzing: true) }),
@@ -65,7 +77,39 @@ enum Sample {
                               literal: literal, realMeaning: meaning, suggestedReply: reply,
                               engine: engine, latencyMs: latency)
         r.date = Date(timeIntervalSinceNow: -minutesAgo * 60)
+        r.contact = "小美"
         return r
+    }
+
+    static var withMemoryNote: EmotionReport {
+        var r = report("这周要准备期末，可能没空出去了，别生气哈", emotion: "焦虑", intensity: 1,
+                       flags: [.needsComfort: 1], response: "安慰共情", consistency: "一致", target: "自己",
+                       meaning: "压力很大，怕你失望，希望你能理解", reply: "没事，考试最重要！需要的话我给你带奶茶，考完我们再去玩")
+        r.memoryNote = "这周在准备期末考试"
+        return r
+    }
+
+    /// 预览用的示例记忆（虚构）。
+    static func fillMemory(_ store: ContactMemoryStore) {
+        store.update("小美") { memory in
+            memory.relationship = "恋人"
+            memory.notes = [
+                .init(text: "最近在准备考研，压力很大", source: .user, date: Date(timeIntervalSinceNow: -9 * 86_400)),
+                .init(text: "不喜欢被说「你想多了」", source: .user, date: Date(timeIntervalSinceNow: -6 * 86_400)),
+                .init(text: "10 月 12 日生日", source: .ai, date: Date(timeIntervalSinceNow: -2 * 86_400)),
+            ]
+            let history: [(String, String, [String: Double], Double)] = [
+                ("今天好累啊", "难过", [:], 9), ("你怎么又不回消息", "委屈", ["angry_at_me": 1], 6),
+                ("哦", "冷淡", ["perfunctory": 1, "cold_distance": 1], 5), ("没事，你忙吧", "失望", ["sarcasm": 1], 3),
+                ("哼，这还差不多", "亲昵", [:], 2), ("哈哈哈你好笨", "开心", [:], 1), ("嗯", "冷淡", ["perfunctory": 1], 0.5),
+            ]
+            for (text, emotion, flags, days) in history {
+                var r = report(text, emotion: emotion, intensity: 1, flags: [:], response: "正常聊天")
+                r.flags = flags
+                r.date = Date(timeIntervalSinceNow: -days * 86_400)
+                memory.record(r)
+            }
+        }
     }
 
     static let sarcasm = report(

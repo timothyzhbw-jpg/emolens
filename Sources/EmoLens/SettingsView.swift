@@ -79,6 +79,28 @@ struct SettingsView: View {
                     }
                 }
 
+                Section {
+                    Toggle("分析时参考联系人记忆", isOn: $settings.useMemory)
+                    Toggle("自动记录每次的分析结果", isOn: $settings.autoRecordMemory)
+                    let contacts = monitor.memory.contacts.values.sorted { $0.name < $1.name }
+                    if !contacts.isEmpty {
+                        ForEach(contacts, id: \.name) { memory in
+                            LabeledContent(memory.name) {
+                                HStack {
+                                    Text("\(memory.notes.count) 件事 · \(memory.entries.count) 次记录").foregroundStyle(.secondary)
+                                    Button("删除", role: .destructive) { monitor.forget(memory.name) }
+                                }
+                            }
+                        }
+                        Button("清空全部记忆", role: .destructive) { monitor.forgetAll() }
+                    }
+                } header: {
+                    Text("联系人记忆")
+                } footer: {
+                    Text("只存在本机：~/Library/Application Support/EmoLens/memory.json。用云端模型时，当前联系人的记忆摘要会随分析一起发送。")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+
                 Section("其他") {
                     LabeledContent("截图间隔") {
                         HStack {

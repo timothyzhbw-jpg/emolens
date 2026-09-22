@@ -16,6 +16,10 @@ public struct EmotionReport: Codable, Equatable, Sendable, Identifiable {
     public var literal: String?
     public var realMeaning: String?
     public var suggestedReply: String?
+    /// 模型建议记住的事（例如「TA 下周三面试」）；用户确认后才写进联系人记忆。
+    public var memoryNote: String?
+    /// 聊天对象的名字（识别出来的或手动设置的），用于联系人记忆。
+    public var contact: String?
     public var engine: String
     public var latencyMs: Double
     public var date = Date()
@@ -23,7 +27,8 @@ public struct EmotionReport: Codable, Equatable, Sendable, Identifiable {
     public init(message: ChatMessage, emotion: String, emotionProbability: Double? = nil, intensity: Double,
                 flags: [String: Double], bestResponse: String? = nil, consistency: String? = nil,
                 target: String? = nil, literal: String? = nil,
-                realMeaning: String? = nil, suggestedReply: String? = nil, engine: String, latencyMs: Double) {
+                realMeaning: String? = nil, suggestedReply: String? = nil, memoryNote: String? = nil,
+                contact: String? = nil, engine: String, latencyMs: Double) {
         self.message = message
         self.emotion = emotion
         self.emotionProbability = emotionProbability
@@ -35,6 +40,8 @@ public struct EmotionReport: Codable, Equatable, Sendable, Identifiable {
         self.literal = literal
         self.realMeaning = realMeaning
         self.suggestedReply = suggestedReply
+        self.memoryNote = memoryNote
+        self.contact = contact
         self.engine = engine
         self.latencyMs = latencyMs
     }
@@ -118,10 +125,11 @@ public enum ChatState {
         }
     }
 
-    /// relationship 为「恋人」「家人」等；nil 或「不确定」时不写。
-    public static func render(context: [ChatMessage], latest: ChatMessage, relationship: String? = nil) -> String {
+    /// relationship 为「恋人」「家人」等；nil 或「不确定」时不写。memory 为联系人记忆摘要。
+    public static func render(context: [ChatMessage], latest: ChatMessage, relationship: String? = nil, memory: String? = nil) -> String {
         var text = ""
         if let relationship, !relationship.isEmpty, relationship != "不确定" { text += "双方关系：\(relationship)\n" }
+        if let memory, !memory.isEmpty { text += memory + "\n\n" }
         text += "以下是微信聊天记录（按时间顺序，「我」是用户，「对方」是聊天对象）：\n"
         text += context.map(line).joined(separator: "\n")
         text += "\n\n需要分析的是对方最新这条：\n" + line(latest)

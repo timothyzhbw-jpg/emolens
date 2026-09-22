@@ -54,6 +54,13 @@ enum WindowCapture {
         return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
     }
 
+    /// 聊天区域正上方的一条（微信在这里显示对方名字）。区域贴着窗口顶部时没有标题栏可读，返回 nil。
+    static func headerRegion(above region: CGRect) -> CGRect? {
+        let top = max(0, region.minY - 0.12)
+        guard region.minY - top >= 0.02 else { return nil }
+        return CGRect(x: region.minX, y: top, width: region.width, height: region.minY - top)
+    }
+
     /// region 为归一化坐标（原点左上）。
     static func crop(_ image: CGImage, to region: CGRect) -> CGImage? {
         let w = CGFloat(image.width), h = CGFloat(image.height)

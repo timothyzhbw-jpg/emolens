@@ -8,6 +8,7 @@ EmoLens 是一个开源的 macOS 桌面小工具：像共享屏幕一样实时�
 - 字面意思和真实想法是否一致：**反话、撒娇、没说完**
 - 关系信号：在生我的气、敷衍 / 不想争了、需要安慰、在试探我、冷淡疏远、冷战 / 分手信号、**情感操控**、**自伤风险**
 - 建议的回应方式，以及一句可以直接发的回复
+- **记得每个人**：认出正在和谁聊，参考你们过去的情绪走势和你记下的事（「她在准备考研」「别说她想多了」），判断更贴合你们的情况
 
 <p align="center">
   <img src="docs/screenshots/report.png" width="300" alt="读出反话和潜台词">
@@ -49,6 +50,19 @@ swift run EmoLensDemo
 ```
 
 然后在 EmoLens 设置里把「要看的窗口」选成「EmoLensDemo」。
+
+## 联系人记忆
+
+<p align="center"><img src="docs/screenshots/memory.png" width="300" alt="联系人记忆与「要记住吗」提示"></p>
+
+EmoLens 会读聊天窗口顶部的名字，认出正在和谁聊（认错了可以在面板上改），并为每个人单独记住：
+
+- **你记下的事**：在「记忆」里随手记，比如近况、喜好、雷区、重要日子。
+- **AI 建议记住的事**：对方透露了具体的日子、计划、身体状况或喜好时（「下周三面试」「对虾过敏」），面板会问「要记住吗？」——**只有你点「记住」才会写进去**。
+- **情绪走势**：自动累计最近的情绪和关系信号（原话只留前 40 字）。
+- **每个人自己的关系**：小美是恋人、王经理是同事，切换聊天时自动切换。
+
+分析时，EmoLens 把这个人的记忆摘要作为背景一起交给模型，并提醒模型「以这次的原话为准」。记忆只存在本机 `~/Library/Application Support/EmoLens/memory.json`（仅你自己可读），可以按人删除或一键清空，也可以在设置里关掉「参考记忆」或「自动记录」。用云端模型时，当前联系人的记忆摘要会随分析一起发送。
 
 ## 分析引擎
 
@@ -101,6 +115,7 @@ KEV_DTYPE=bf16 KEV_MERGE=0 uv run --extra serve python -m kev.serve --run jaredp
 
 - **只看得到屏幕上的内容**：文字识别依赖框选的区域。图片、表情包、语音不会被分析；群聊昵称的识别是启发式的。
 - **只分析对方最新的一条**，上下文取最近约 10 条。切换聊天或往上翻页时会重新对齐。
+- **联系人名字靠识别标题栏**：聊天区域要框在名字下方才能认出来；认错或没认出时，在面板上点铅笔手动改。
 - **模型会犯错**：尤其是 4B 小模型，同一句话两次的结果可能不同。重要的判断请结合原话和你对对方的了解。
 - 没有创建 `EmoLens Local` 签名证书时，`build_app.sh` 只能做 ad-hoc 签名，每次重新构建后都要重新授予屏幕录制权限（见「快速开始」）。
 - 目前只针对 Mac 版微信的布局调过参数；其他聊天软件只要是「对方靠左、我靠右」的布局，通常也能用。
@@ -110,7 +125,7 @@ KEV_DTYPE=bf16 KEV_MERGE=0 uv run --extra serve python -m kev.serve --run jaredp
 ## 负责任地使用
 
 - **这不是心理诊断工具**，也不能代替真诚的沟通。
-- 聊天里有对方的隐私。EmoLens 默认不保存任何记录；请不要用它监视别人。选用云端模型前，想清楚是否愿意把这些内容交给服务商处理。
+- 聊天里有对方的隐私。联系人记忆只存在本机，随时可以删；请不要用它监视别人。选用云端模型前，想清楚是否愿意把这些内容交给服务商处理。
 - 看到「自伤风险」提醒时：先温和地问一句对方现在是否安全，陪着 TA；如果 TA 提到具体的打算、正在伤害自己或突然联系不上，请马上联系 TA 身边的人，或拨打 120 / 110。心理援助热线：**12356**（多数地区已开通），**希望24热线 400-161-9995**。
 - 看到「情感操控」提醒时：你的感受是真实的。可以温和而坚定地守住边界，必要时向信任的人求助。
 
@@ -129,7 +144,7 @@ Sources/EmoLensDemo/   仿微信演示聊天窗口
 presets/               问题集与提示词
 ```
 
-调试时可以设置 `EMOLENS_LOG=/path/to/reports.jsonl`，把每次分析结果追加写入该文件；默认不写任何文件。运行日志：`log stream --predicate 'subsystem == "io.github.emolens"'`（消息正文标为隐私，不会明文出现）。
+调试时可以设置 `EMOLENS_LOG=/path/to/reports.jsonl`，把每次分析结果追加写入该文件；设置 `EMOLENS_MEMORY=/path/to/memory.json` 可以让记忆写到别的文件（测试时避免碰到真实记忆）。运行日志：`log stream --predicate 'subsystem == "io.github.emolens"'`（消息正文标为隐私，不会明文出现）。
 
 界面预览：`swift run EmoLens --render-previews docs/screenshots` 会用虚构的示例数据把各种状态（亮色 / 暗色）渲染成 PNG，不截屏、不需要任何权限。
 
@@ -145,4 +160,4 @@ presets/               问题集与提示词
 
 ---
 
-**English summary.** EmoLens is an open-source macOS floating-panel app that watches a chat window (WeChat by default) via ScreenCaptureKit, OCRs new messages locally with Apple Vision, and analyzes the other person's latest message with a local model (Ollama, optionally cross-checked by a System One decision model such as Kev): emotion, subtext (sarcasm / coy / unsaid), relationship signals including manipulation and self-harm risk, and a suggested reply. By default everything runs on-device; you can opt into cloud models (OpenAI-compatible services such as OpenAI, DeepSeek, Qwen, OpenRouter, or Anthropic Claude via the native Messages API with structured outputs), in which case the message and recent context are sent to that provider. It never touches the WeChat protocol.
+**English summary.** EmoLens is an open-source macOS floating-panel app that watches a chat window (WeChat by default) via ScreenCaptureKit, OCRs new messages locally with Apple Vision, and analyzes the other person's latest message with a local model (Ollama, optionally cross-checked by a System One decision model such as Kev): emotion, subtext (sarcasm / coy / unsaid), relationship signals including manipulation and self-harm risk, and a suggested reply. By default everything runs on-device; you can opt into cloud models (OpenAI-compatible services such as OpenAI, DeepSeek, Qwen, OpenRouter, or Anthropic Claude via the native Messages API with structured outputs), in which case the message, recent context and that contact's memory summary are sent to that provider. EmoLens also keeps a local per-contact memory (notes you confirm, emotion trends, per-contact relationship) that is fed back into the analysis. It never touches the WeChat protocol.

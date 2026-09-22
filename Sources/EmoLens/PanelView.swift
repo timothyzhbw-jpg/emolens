@@ -8,7 +8,9 @@ struct PanelView: View {
     /// 预览渲染时关掉滚动视图（它由 AppKit 绘制，渲染不出来）。
     var scrolls = true
     @State private var showSettings = false
+    @State private var memoryContact: String?
     @State private var selectedID: UUID?
+    @State private var handledSuggestions: Set<UUID> = []
 
     private var shown: EmotionReport? {
         monitor.reports.first { $0.id == selectedID } ?? monitor.reports.first
@@ -17,7 +19,9 @@ struct PanelView: View {
     var body: some View {
         VStack(spacing: 0) {
             PanelHeader(monitor: monitor, openSettings: { showSettings = true })
-            RelationshipBar(selection: $settings.relationship)
+            ContactBar(monitor: monitor) { memoryContact = monitor.currentContact }
+                .padding(.horizontal, 14).padding(.bottom, 8)
+            RelationshipBar(selection: relationship)
                 .padding(.horizontal, 14).padding(.bottom, 10)
             Hairline()
             if scrolls {
@@ -30,6 +34,9 @@ struct PanelView: View {
         }
         .frame(minWidth: 340, idealWidth: 372, minHeight: 540)
         .sheet(isPresented: $showSettings) { SettingsView(monitor: monitor, settings: settings) }
+        .sheet(item: Binding(get: { memoryContact.map(ContactID.init) }, set: { memoryContact = $0?.name })) { item in
+            MemoryView(monitor: monitor, settings: settings, contact: item.name)
+        }
         .onChange(of: monitor.reports.first?.id) { selectedID = nil }
     }
 
@@ -39,7 +46,8 @@ struct PanelView: View {
             if let report = shown {
                 ReportView(report: report,
                            isLatest: report.id == monitor.reports.first?.id,
-                           analyzing: monitor.analyzing)
+                           analyzing: monitor.analyzing,
+                           suggestion: suggestion(for: report))
                     .id(report.id)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             } else {
@@ -52,6 +60,36 @@ struct PanelView: View {
         .padding(14)
         .animation(.easeOut(duration: 0.25), value: shown?.id)
     }
+
+    /// 认出联系人时，关系跟着联系人走；否则用全局选择。
+    private var relationship: Binding<String> {
+        Binding(
+            get: { _ = monitor.memoryVersion; return monitor.relationship(for: monitor.currentContact) },
+            set: { value in
+                if let contact = monitor.currentContact {
+                    monitor.editMemory(contact) { $0.relationship = value }
+                } else {
+                    settings.relationship = value
+                }
+            })
+    }
+
+    private func suggestion(for report: EmotionReport) -> MemorySuggestion? {
+        guard let note = report.memoryNote, !handledSuggestions.contains(report.id) else { return nil }
+        let contact = report.contact ?? monitor.currentContact
+        return MemorySuggestion(note: note, contact: contact,
+                                remember: {
+                                    if let contact { monitor.remember(note, for: contact) }
+                                    handledSuggestions.insert(report.id)
+                                },
+                                dismiss: { handledSuggestions.insert(report.id) })
+    }
+}
+
+/// 让联系人名字能用在 .sheet(item:) 上。
+struct ContactID: Identifiable {
+    let name: String
+    var id: String { name }
 }
 
 // MARK: - Header
@@ -135,6 +173,7 @@ struct ReportView: View {
     let report: EmotionReport
     let isLatest: Bool
     let analyzing: Bool
+    var suggestion: MemorySuggestion? = nil
 
     private var flags: [EmotionFlag] { report.activeFlags() }
     private var selfHarm: Bool { flags.contains(.selfHarm) }
@@ -151,6 +190,7 @@ struct ReportView: View {
             if report.bestResponse != nil || report.suggestedReply != nil {
                 SuggestionCard(response: selfHarm ? "先接住 TA" : report.bestResponse, reply: report.suggestedReply)
             }
+            if let suggestion { suggestion }
             Text("\(report.engine) · \(String(format: "%.1f", report.latencyMs / 1000)) 秒")
                 .font(.system(size: 10)).foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, alignment: .trailing)

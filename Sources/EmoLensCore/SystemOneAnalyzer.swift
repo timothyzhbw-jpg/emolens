@@ -26,16 +26,19 @@ public struct SystemOneAnalyzer: EmotionAnalyzer {
     public var baseURL: URL
     public var preset: SystemOnePreset
     public var relationship: String?
+    public var memory: String?
 
-    public init(baseURL: URL = URL(string: "http://127.0.0.1:8009")!, preset: SystemOnePreset, relationship: String? = nil) {
+    public init(baseURL: URL = URL(string: "http://127.0.0.1:8009")!, preset: SystemOnePreset,
+                relationship: String? = nil, memory: String? = nil) {
         self.baseURL = baseURL
         self.preset = preset
         self.relationship = relationship
+        self.memory = memory
     }
 
     public func analyze(context: [ChatMessage], latest: ChatMessage) async throws -> EmotionReport {
         let body: [String: Any] = [
-            "state": ChatState.render(context: context, latest: latest, relationship: relationship),
+            "state": ChatState.render(context: context, latest: latest, relationship: relationship, memory: memory),
             "model": "kev-latest",
             "questions": preset.questions,
         ]

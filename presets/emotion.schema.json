@@ -91,6 +91,10 @@
     "suggested_reply": {
       "type": "string",
       "description": "「我」要发给对方的一句口语回复"
+    },
+    "memory_note": {
+      "type": "string",
+      "description": "对方这条消息透露的、值得长期记住的具体事实（例如「下周三面试」）；没有就填空字符串"
     }
   },
   "required": [
@@ -109,7 +113,8 @@
     "manipulation",
     "self_harm",
     "best_response",
-    "suggested_reply"
+    "suggested_reply",
+    "memory_note"
   ],
   "additionalProperties": false
 }

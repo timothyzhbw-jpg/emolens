@@ -25,12 +25,14 @@ public struct LLMAnalyzer: EmotionAnalyzer {
     public var backend: ChatBackend
     public var prompt: LLMPrompt
     public var relationship: String?
+    public var memory: String?
     public var name: String { backend.name }
 
-    public init(backend: ChatBackend, prompt: LLMPrompt, relationship: String? = nil) {
+    public init(backend: ChatBackend, prompt: LLMPrompt, relationship: String? = nil, memory: String? = nil) {
         self.backend = backend
         self.prompt = prompt
         self.relationship = relationship
+        self.memory = memory
     }
 
     /// few-shot 示例在前，当前对话在最后。
@@ -40,7 +42,8 @@ public struct LLMAnalyzer: EmotionAnalyzer {
             turns.append(ChatTurn(role: "user", content: example.chat))
             turns.append(ChatTurn(role: "assistant", content: try Self.encodeInOrder(example.answer)))
         }
-        turns.append(ChatTurn(role: "user", content: ChatState.render(context: context, latest: latest, relationship: relationship)))
+        turns.append(ChatTurn(role: "user", content: ChatState.render(context: context, latest: latest,
+                                                                     relationship: relationship, memory: memory)))
         return turns
     }
 
@@ -55,7 +58,7 @@ public struct LLMAnalyzer: EmotionAnalyzer {
     /// 示例答案按提示词里的顺序输出：先字面、再真实想法、最后回复。字典本身是无序的。
     static let answerOrder = ["literal", "consistency", "real_meaning", "emotion", "intensity", "target",
                               "angry_at_me", "perfunctory", "needs_comfort", "testing", "cold_distance",
-                              "conflict", "manipulation", "self_harm", "best_response", "suggested_reply"]
+                              "conflict", "manipulation", "self_harm", "best_response", "suggested_reply", "memory_note"]
 
     static func encodeInOrder(_ answer: [String: JSONValue]) throws -> String {
         let keys = answerOrder.filter { answer[$0] != nil } + answer.keys.filter { !answerOrder.contains($0) }.sorted()
@@ -103,6 +106,7 @@ public struct LLMAnalyzer: EmotionAnalyzer {
             literal: json["literal"] as? String,
             realMeaning: json["real_meaning"] as? String,
             suggestedReply: json["suggested_reply"] as? String,
+            memoryNote: (json["memory_note"] as? String).flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 },
             engine: engine,
             latencyMs: latencyMs
         )
