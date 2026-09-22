@@ -27,6 +27,27 @@ final class AnalyzerTests: XCTestCase {
         XCTAssertThrowsError(try OllamaAnalyzer.report(from: "抱歉，我无法回答", message: latest, engine: "t", latencyMs: 1))
     }
 
+    func testConsistencyIsNormalized() throws {
+        let messy = #"{"emotion":"冷淡","consistency":"敷衍或不想争了（「哦」「都行」「你看着办」）"}"#
+        XCTAssertNil(try OllamaAnalyzer.report(from: messy, message: latest, engine: "t", latencyMs: 1).consistency)
+        let wrapped = #"{"emotion":"委屈","consistency":"反话（嘴上说没事）"}"#
+        XCTAssertEqual(try OllamaAnalyzer.report(from: wrapped, message: latest, engine: "t", latencyMs: 1).consistency, "反话")
+    }
+
+    func testCurlyQuoteDelimitersAreRepaired() throws {
+        let broken = #"{"emotion": "生气", "real_meaning": “想控制我”, "suggested_reply": "我们聊聊“信任”这件事吧”}"#
+        let r = try OllamaAnalyzer.report(from: broken, message: latest, engine: "t", latencyMs: 1)
+        XCTAssertEqual(r.realMeaning, "想控制我")
+        XCTAssertEqual(r.suggestedReply, "我们聊聊“信任”这件事吧", "字符串内部的中文引号要保留")
+    }
+
+    func testExamplesAreEncodedInPromptOrder() throws {
+        let text = try OllamaAnalyzer.encodeInOrder([
+            "suggested_reply": .string("好"), "emotion": .string("开心"), "literal": .string("嗯"), "intensity": .number(1),
+        ])
+        XCTAssertEqual(text, #"{"literal": "嗯", "emotion": "开心", "intensity": 1, "suggested_reply": "好"}"#)
+    }
+
     func testIntensityIsClamped() throws {
         let r = try OllamaAnalyzer.report(from: #"{"emotion":"生气","intensity":9}"#, message: latest, engine: "t", latencyMs: 1)
         XCTAssertEqual(r.intensity, 3)
@@ -129,11 +150,29 @@ final class CombinedAnalyzerTests: XCTestCase {
         XCTAssertEqual(r.engine, "llm + kev")
     }
 
+    struct Slow: EmotionAnalyzer {
+        var name = "slow"
+        func analyze(context: [ChatMessage], latest: ChatMessage) async throws -> EmotionReport {
+            try await Task.sleep(for: .seconds(5))
+            return EmotionReport(message: latest, emotion: "生气", intensity: 3, flags: ["manipulation": 1], engine: name, latencyMs: 5000)
+        }
+    }
+
+    func testSlowCheckerTimesOutWithoutBlocking() async throws {
+        let combined = CombinedAnalyzer(primary: Fake(name: "llm", flags: ["manipulation": 0]),
+                                        checker: Slow(), checkerTimeout: .milliseconds(100))
+        let start = Date()
+        let r = try await combined.analyze(context: [], latest: latest)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 2)
+        XCTAssertEqual(r.flags["manipulation"], 0)
+        XCTAssertEqual(r.engine, "llm（slow 未响应）")
+    }
+
     func testCheckerFailureFallsBackToPrimary() async throws {
         let combined = CombinedAnalyzer(primary: Fake(name: "llm", flags: ["conflict": 0.2]),
                                         checker: Fake(name: "kev", flags: [:], fails: true))
         let r = try await combined.analyze(context: [], latest: latest)
         XCTAssertEqual(r.flags["conflict"], 0.2)
-        XCTAssertEqual(r.engine, "llm")
+        XCTAssertEqual(r.engine, "llm（kev 未响应）")
     }
 }

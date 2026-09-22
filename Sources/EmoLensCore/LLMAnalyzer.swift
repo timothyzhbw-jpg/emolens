@@ -34,9 +34,8 @@ public struct OllamaAnalyzer: EmotionAnalyzer {
     public func analyze(context: [ChatMessage], latest: ChatMessage) async throws -> EmotionReport {
         var messages: [[String: String]] = [["role": "system", "content": prompt.system]]
         for example in prompt.examples {
-            let answer = try String(data: JSONEncoder().encode(example.answer), encoding: .utf8) ?? "{}"
             messages.append(["role": "user", "content": example.chat])
-            messages.append(["role": "assistant", "content": answer])
+            messages.append(["role": "assistant", "content": try Self.encodeInOrder(example.answer)])
         }
         messages.append(["role": "user", "content": ChatState.render(context: context, latest: latest, relationship: relationship)])
         let body: [String: Any] = [
@@ -52,18 +51,45 @@ public struct OllamaAnalyzer: EmotionAnalyzer {
         return try Self.report(from: content, message: latest, engine: name, latencyMs: latency)
     }
 
+    /// 示例答案按提示词里的顺序输出：先字面、再真实想法、最后回复。字典本身是无序的。
+    static let answerOrder = ["literal", "consistency", "real_meaning", "emotion", "intensity", "target",
+                              "angry_at_me", "perfunctory", "needs_comfort", "testing", "cold_distance",
+                              "conflict", "manipulation", "self_harm", "best_response", "suggested_reply"]
+
+    static func encodeInOrder(_ answer: [String: JSONValue]) throws -> String {
+        let keys = answerOrder.filter { answer[$0] != nil } + answer.keys.filter { !answerOrder.contains($0) }.sorted()
+        let fields = try keys.map { key -> String in
+            let value = try String(data: JSONEncoder().encode(answer[key]!), encoding: .utf8) ?? "null"
+            return "\"\(key)\": \(value)"
+        }
+        return "{" + fields.joined(separator: ", ") + "}"
+    }
+
+    /// 取出模型输出里的 JSON 对象。小模型偶尔用中文引号「“ ”」当字符串的边界，解析失败时修一次再试。
+    static func parseObject(_ content: String) -> [String: Any]? {
+        guard let start = content.firstIndex(of: "{"), let end = content.lastIndex(of: "}") else { return nil }
+        let raw = String(content[start...end])
+        for candidate in [raw, repairQuotes(raw)] {
+            if let data = candidate.data(using: .utf8),
+               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] { return object }
+        }
+        return nil
+    }
+
+    static func repairQuotes(_ json: String) -> String {
+        json.replacingOccurrences(of: #"([:\[,{]\s*)[“”]"#, with: "$1\"", options: .regularExpression)
+            .replacingOccurrences(of: #"[“”](\s*[,}\]:])"#, with: "\"$1", options: .regularExpression)
+    }
+
     /// 解析模型输出的 JSON，对类型宽容（"true" / 1 / 0.8 都能当布尔用）。
     public static func report(from content: String, message: ChatMessage, engine: String, latencyMs: Double) throws -> EmotionReport {
-        guard let start = content.firstIndex(of: "{"), let end = content.lastIndex(of: "}"),
-              let data = String(content[start...end]).data(using: .utf8),
-              let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { throw AnalyzerError.badResponse(String(content.prefix(200))) }
+        guard let json = parseObject(content) else { throw AnalyzerError.badResponse(String(content.prefix(200))) }
 
         var flags: [String: Double] = [:]
         for flag in EmotionFlag.allCases {
             flags[flag.rawValue] = probability(json[flag.rawValue])
         }
-        let consistency = json["consistency"] as? String
+        let consistency = canonicalConsistency(json["consistency"] as? String)
         if consistency == "反话" { flags[EmotionFlag.sarcasm.rawValue] = 1 }
         return EmotionReport(
             message: message,
@@ -79,6 +105,12 @@ public struct OllamaAnalyzer: EmotionAnalyzer {
             engine: engine,
             latencyMs: latencyMs
         )
+    }
+
+    /// 小模型有时会把别的字段的说明填进来，只接受四个规范值。
+    static func canonicalConsistency(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        return ["反话", "撒娇", "没说完", "一致"].first { raw.contains($0) }
     }
 
     static func number(_ value: Any?) -> Double? {

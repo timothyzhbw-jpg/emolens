@@ -27,7 +27,7 @@ enum EmoLensMain {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let settings = AppSettings()
     private lazy var monitor = Monitor(settings: settings)
     private var panel: NSPanel?
@@ -53,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let screen = NSScreen.main?.visibleFrame {
             panel.setFrameOrigin(NSPoint(x: screen.maxX - 392, y: screen.maxY - 720))
         }
+        panel.delegate = self
         panel.makeKeyAndOrderFront(nil)
         self.panel = panel
         NSApp.activate()
@@ -76,7 +77,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return effect
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    // 主面板是 NSPanel，AppKit 判断「最后一个窗口」时不算它：设置页一关就会误退出。
+    // 所以只在关掉主面板时退出。
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    func windowWillClose(_ notification: Notification) {
+        if (notification.object as? NSPanel) === panel { NSApp.terminate(nil) }
+    }
 
     private static func makeMenu() -> NSMenu {
         let main = NSMenu()

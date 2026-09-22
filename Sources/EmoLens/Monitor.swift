@@ -10,13 +10,14 @@ private let log = Logger(subsystem: "io.github.emolens", category: "monitor")
 @MainActor
 final class Monitor: ObservableObject {
     enum Status: Equatable {
-        case paused, watching, noWindow, needsPermission, failed(String)
+        case paused, watching, noWindow(chosen: Bool), windowHidden(String), needsPermission, failed(String)
 
         var text: String {
             switch self {
             case .paused: "已暂停"
             case .watching: "正在看微信"
-            case .noWindow: "没找到微信窗口"
+            case .noWindow(let chosen): chosen ? "选定的窗口不见了，请在设置里重新选" : "没找到微信窗口，请先打开微信"
+            case .windowHidden(let name): "\(name) 被最小化了，点程序坞把它恢复"
             case .needsPermission: "需要屏幕录制权限"
             case .failed(let message): message
             }
@@ -44,6 +45,22 @@ final class Monitor: ObservableObject {
     }
 
     var isRunning: Bool { loop != nil || previewRunning }
+
+    /// 新手引导用：窗口是否就绪，以及没就绪时的短提示。
+    var windowFound: Bool {
+        switch status {
+        case .noWindow, .windowHidden, .needsPermission: false
+        default: !windowName.isEmpty
+        }
+    }
+
+    var windowHint: String {
+        switch status {
+        case .noWindow: "没找到"
+        case .windowHidden: "被最小化了"
+        default: "查找中"
+        }
+    }
     var canRetry: Bool { failed != nil && !analyzing }
 
     /// 重新分析上一条失败的消息。
@@ -103,13 +120,20 @@ final class Monitor: ObservableObject {
 
     private func tick() async {
         do {
-            guard let window = try await WindowCapture.find(id: settings.windowID) else {
-                if status != .noWindow { log.info("window not found, id=\(self.settings.windowID)") }
-                status = .noWindow
+            let window: SCWindow
+            switch try await WindowCapture.find(id: settings.windowID) {
+            case .found(let found): window = found
+            case .hidden(let name):
+                if status != .windowHidden(name) { log.notice("window hidden: \(name, privacy: .public)") }
+                status = .windowHidden(name)
+                return
+            case .missing:
+                let next = Status.noWindow(chosen: settings.windowID != 0)
+                if status != next { log.notice("window missing, id=\(self.settings.windowID)") }
+                status = next
                 return
             }
-            windowName = [window.owningApplication?.applicationName, window.title]
-                .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+            windowName = WindowCapture.name(of: window)
             let frame = try await WindowCapture.capture(window)
             preview = frame
             status = .watching
@@ -119,7 +143,7 @@ final class Monitor: ObservableObject {
             let lines = try await Task.detached(priority: .userInitiated) { try TextRecognizer.recognize(chat) }.value
             let messages = ChatParser.parse(lines)
             let them = messages.filter { $0.speaker == .them }.count
-            log.info("frame changed: \(chat.width)x\(chat.height)px, \(lines.count) OCR lines, \(messages.count) messages (\(them) from them)")
+            log.notice("frame changed: \(chat.width)x\(chat.height)px, \(lines.count) OCR lines, \(messages.count) messages (\(them) from them)")
             handle(tracker.update(messages))
         } catch {
             log.error("tick failed: \(error.localizedDescription, privacy: .public)")
@@ -134,7 +158,7 @@ final class Monitor: ObservableObject {
         case .appended(let new): messages = new
         case .reset(let visible): messages = visible
         }
-        log.info("tracker \(String(describing: event).prefix(8), privacy: .public): \(messages.count) messages")
+        log.notice("tracker \(String(describing: event).prefix(8), privacy: .public): \(messages.count) messages")
         if let latest = messages.last(where: { $0.speaker == .them }) { enqueue(latest) }
     }
 
@@ -142,7 +166,7 @@ final class Monitor: ObservableObject {
         let context = contextBefore(latest)
         let key = MessageTracker.normalize((context.last?.text ?? "") + "|" + latest.text)
         guard !analyzedKeys.contains(key) else { return }
-        log.info("queue analysis: \(latest.text, privacy: .private)")
+        log.notice("queue analysis: \(latest.text, privacy: .private)")
         analyzedKeys = Array((analyzedKeys + [key]).suffix(100))
         pending = (context, latest)
         if !analyzing { Task { await drain() } }
@@ -167,7 +191,7 @@ final class Monitor: ObservableObject {
                 reports = Array(reports.prefix(30))
                 analysisError = nil
                 failed = nil
-                log.info("analysis done in \(Int(report.latencyMs)) ms by \(report.engine, privacy: .public)")
+                log.notice("analysis done in \(Int(report.latencyMs)) ms by \(report.engine, privacy: .public)")
             } catch {
                 log.error("analysis failed: \(error.localizedDescription, privacy: .public)")
                 analysisError = describe(error)

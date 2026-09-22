@@ -22,7 +22,7 @@ public struct SystemOnePreset: @unchecked Sendable {
 
 /// 调用兼容 TypeSafe System One API 的决策模型服务（Kev、Jev 等），返回校准过的概率。
 public struct SystemOneAnalyzer: EmotionAnalyzer {
-    public var name: String { "决策模型 · \(baseURL.host() ?? "")" }
+    public var name: String { "决策模型" }
     public var baseURL: URL
     public var preset: SystemOnePreset
     public var relationship: String?
@@ -83,23 +83,42 @@ public struct CombinedAnalyzer: EmotionAnalyzer {
 
     public var primary: EmotionAnalyzer
     public var checker: EmotionAnalyzer
+    /// 复核引擎最多等这么久，超时就只用主引擎的结果，不拖慢整体。
+    public var checkerTimeout: Duration
     public var name: String { "\(primary.name) + \(checker.name)" }
 
-    public init(primary: EmotionAnalyzer, checker: EmotionAnalyzer) {
+    public init(primary: EmotionAnalyzer, checker: EmotionAnalyzer, checkerTimeout: Duration = .seconds(12)) {
         self.primary = primary
         self.checker = checker
+        self.checkerTimeout = checkerTimeout
     }
 
     public func analyze(context: [ChatMessage], latest: ChatMessage) async throws -> EmotionReport {
         async let main = primary.analyze(context: context, latest: latest)
-        async let check = try? checker.analyze(context: context, latest: latest)
+        async let check = Self.withTimeout(checkerTimeout) { [checker] in
+            try await checker.analyze(context: context, latest: latest)
+        }
         var report = try await main
-        guard let extra = await check else { return report }
+        guard let extra = await check else {
+            report.engine = "\(primary.name)（\(checker.name) 未响应）"
+            return report
+        }
         for flag in Self.seriousFlags {
             report.flags[flag.rawValue] = max(report.flags[flag.rawValue] ?? 0, extra.flags[flag.rawValue] ?? 0)
         }
         report.engine = name
         report.latencyMs = max(report.latencyMs, extra.latencyMs)
         return report
+    }
+
+    /// 在时限内完成则返回结果；超时或出错返回 nil。
+    static func withTimeout<T: Sendable>(_ limit: Duration, _ work: @escaping @Sendable () async throws -> T) async -> T? {
+        await withTaskGroup(of: T?.self) { group in
+            group.addTask { try? await work() }
+            group.addTask { try? await Task.sleep(for: limit); return nil }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
     }
 }

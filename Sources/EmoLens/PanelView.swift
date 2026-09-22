@@ -525,8 +525,7 @@ struct Onboarding: View {
                 check("屏幕录制权限", done: monitor.status != .needsPermission && monitor.preview != nil,
                       hint: monitor.status == .needsPermission ? "未授权" : "检查中")
                 Hairline().padding(.leading, 34)
-                check("找到聊天窗口", done: !monitor.windowName.isEmpty && monitor.status != .noWindow,
-                      hint: monitor.status == .noWindow ? "没找到" : "查找中")
+                check("找到聊天窗口", done: monitor.windowFound, hint: monitor.windowHint)
                 Hairline().padding(.leading, 34)
                 check("框出聊天区域", done: settings.region != CGRect(x: 0, y: 0, width: 1, height: 1),
                       hint: "建议设置")

@@ -43,7 +43,7 @@ enum PreviewRenderer {
         ("manipulation", { $0.loadPreview(status: .watching, reports: [Sample.manipulation, Sample.sarcasm]) }),
         ("safety", { $0.loadPreview(status: .watching, reports: [Sample.selfHarm]) }),
         ("analyzing", { $0.loadPreview(status: .watching, reports: [Sample.coy], analyzing: true) }),
-        ("onboarding", { $0.loadPreview(status: .noWindow, reports: [], windowName: "") }),
+        ("onboarding", { $0.loadPreview(status: .noWindow(chosen: false), reports: [], windowName: "") }),
         ("error", { $0.loadPreview(status: .watching, reports: [],
                                    error: "连不上分析引擎（本地大模型）。请先在终端运行 ollama serve。") }),
     ]
