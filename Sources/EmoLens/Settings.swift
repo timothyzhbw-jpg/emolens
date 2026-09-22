@@ -51,7 +51,8 @@ final class AppSettings: ObservableObject {
         relationship = defaults.string(forKey: "relationship") ?? "不确定"
         interval = defaults.object(forKey: "interval") as? Double ?? 1.5
         windowID = CGWindowID(defaults.integer(forKey: "windowID"))
-        let r = defaults.array(forKey: "region") as? [Double] ?? [0, 0, 1, 1]
+        // 兼容数字被存成字符串的情况（例如用 defaults write 命令写入）。
+        let r = (defaults.array(forKey: "region") ?? []).compactMap { ($0 as? NSNumber)?.doubleValue ?? Double("\($0)") }
         region = r.count == 4 ? CGRect(x: r[0], y: r[1], width: r[2], height: r[3]) : CGRect(x: 0, y: 0, width: 1, height: 1)
     }
 
