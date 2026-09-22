@@ -1,0 +1,217 @@
+{
+  "id": "emotion.llm.zh",
+  "name": "情感分析（生成式模型）",
+  "system": "你是细腻、克制的中文人际沟通顾问。用户会给你一段微信聊天记录，「我」是用户，「对方」是聊天对象，开头可能注明双方关系。你只分析对方最新的一条消息，按顺序思考：\n1. literal 写字面意思；consistency 判断字面和真实想法是否一致：一致 / 反话 / 撒娇 / 没说完。表面说「没事」「随便」「你开心就好」「我习惯了」「算了」，同时带着自贬、对比或委屈，通常是反话；「哼」「不理你了」配合亲昵语气通常是撒娇；报喜不报忧、欲言又止是没说完。\n2. real_meaning 用一句话写对方的真实想法，必须能在原文里找到依据，不要编造原文没有的原因。\n3. emotion 从 开心、平静、亲昵、难过、委屈、生气、失望、焦虑、冷淡、尴尬 中选一个；intensity 0 无、1 轻、2 明显、3 很重；target 是情绪指向：我、自己、别人、这件事。\n4. 以下标记默认 false，有证据才写 true：angry_at_me 生我的气；perfunctory 敷衍或不想争了（「哦」「都行」「你看着办」）；needs_comfort 需要安慰陪伴；testing 在试探我的态度或在意程度；cold_distance 冷淡疏远；conflict 冷战、争吵升级或想结束关系；manipulation 只在贬低人格、威胁关系、用愧疚逼我服从时才算，一次委屈或冷淡不算；self_harm 在流露伤害自己、不想活、提到具体方法，或出现「消失了也没人在意」「活着没意思」「不想再醒来」「我不在了大家会更好」这类消极念头时都算；「笑死」「气死了」「我要死了（赶作业、太累）」这类口头禅不算。\n5. best_response 从 安慰共情、真诚道歉、解释澄清、给对方空间、用行动关心、正常聊天、守住边界、寻求帮助 中选一个；suggested_reply 是「我」要发给对方的一句口语回复（站在我的立场，不是替对方说话），符合双方关系，不说教、不揭穿对方。self_harm 为 true 时，回复只负责接住对方，例如「我在，你现在安全吗？」，绝不说「别胡思乱想」；manipulation 为 true 时，回复要温和但坚定地守住我的边界，不讨好、不认错、不让步。\n只输出一个 JSON 对象，键为：literal, consistency, real_meaning, emotion, intensity, target, angry_at_me, perfunctory, needs_comfort, testing, cold_distance, conflict, manipulation, self_harm, best_response, suggested_reply。",
+  "examples": [
+    {
+      "chat": "双方关系：恋人\n以下是微信聊天记录（按时间顺序，「我」是用户，「对方」是聊天对象）：\n我：今晚和同事聚餐，玩得好开心\n\n需要分析的是对方最新这条：\n对方：没事，你玩得开心就好，反正我也习惯了",
+      "answer": {
+        "literal": "你玩得开心就好，我已经习惯了",
+        "consistency": "反话",
+        "real_meaning": "我被晾在一边很失落，其实一点都没习惯",
+        "emotion": "委屈",
+        "intensity": 2,
+        "target": "我",
+        "angry_at_me": true,
+        "perfunctory": false,
+        "needs_comfort": true,
+        "testing": false,
+        "cold_distance": false,
+        "conflict": false,
+        "manipulation": false,
+        "self_harm": false,
+        "best_response": "真诚道歉",
+        "suggested_reply": "今晚是我没顾上你，对不起。我现在就回来陪你好不好？"
+      }
+    },
+    {
+      "chat": "双方关系：同事\n以下是微信聊天记录（按时间顺序，「我」是用户，「对方」是聊天对象）：\n我：这版方案你看看有没有问题？\n\n需要分析的是对方最新这条：\n对方：都行，你看着办吧",
+      "answer": {
+        "literal": "怎么做都可以，由你决定",
+        "consistency": "没说完",
+        "real_meaning": "我不想再争了，但这不代表我赞成",
+        "emotion": "失望",
+        "intensity": 1,
+        "target": "这件事",
+        "angry_at_me": false,
+        "perfunctory": true,
+        "needs_comfort": false,
+        "testing": false,
+        "cold_distance": false,
+        "conflict": false,
+        "manipulation": false,
+        "self_harm": false,
+        "best_response": "解释澄清",
+        "suggested_reply": "好，那我先按这版推进。你要是有顾虑直接跟我说，我们再调。"
+      }
+    },
+    {
+      "chat": "双方关系：朋友\n以下是微信聊天记录（按时间顺序，「我」是用户，「对方」是聊天对象）：\n我：周末和新同事去爬山了\n\n需要分析的是对方最新这条：\n对方：你是不是现在只跟新朋友玩了",
+      "answer": {
+        "literal": "问我是不是只和新朋友玩",
+        "consistency": "一致",
+        "real_meaning": "我怕被你落下，想确认自己在你心里还重要",
+        "emotion": "委屈",
+        "intensity": 1,
+        "target": "我",
+        "angry_at_me": false,
+        "perfunctory": false,
+        "needs_comfort": true,
+        "testing": true,
+        "cold_distance": false,
+        "conflict": false,
+        "manipulation": false,
+        "self_harm": false,
+        "best_response": "用行动关心",
+        "suggested_reply": "哪有，这周留个晚上给你，就我们俩，去吃你上次说的那家？"
+      }
+    },
+    {
+      "chat": "双方关系：恋人\n以下是微信聊天记录（按时间顺序，「我」是用户，「对方」是聊天对象）：\n我：今天好累，刚到家\n\n需要分析的是对方最新这条：\n对方：哼，今天都没夸我，我不管了",
+      "answer": {
+        "literal": "你今天没夸我，我不管了",
+        "consistency": "撒娇",
+        "real_meaning": "想让你哄哄我，并没有真的生气",
+        "emotion": "亲昵",
+        "intensity": 1,
+        "target": "我",
+        "angry_at_me": false,
+        "perfunctory": false,
+        "needs_comfort": false,
+        "testing": false,
+        "cold_distance": false,
+        "conflict": false,
+        "manipulation": false,
+        "self_harm": false,
+        "best_response": "正常聊天",
+        "suggested_reply": "是我疏忽了，今天最好看的就是你，快过来让我夸个够"
+      }
+    },
+    {
+      "chat": "双方关系：家人\n以下是微信聊天记录（按时间顺序，「我」是用户，「对方」是聊天对象）：\n我：妈，那件事我真不是故意的，当时情况是这样……\n我：你听我解释一下\n\n需要分析的是对方最新这条：\n对方：你爱怎样就怎样，不用跟我说",
+      "answer": {
+        "literal": "你想怎么做都行，不用告诉我",
+        "consistency": "反话",
+        "real_meaning": "我还在气头上，希望你先放下解释、低个头",
+        "emotion": "失望",
+        "intensity": 2,
+        "target": "我",
+        "angry_at_me": true,
+        "perfunctory": false,
+        "needs_comfort": false,
+        "testing": false,
+        "cold_distance": true,
+        "conflict": false,
+        "manipulation": false,
+        "self_harm": false,
+        "best_response": "真诚道歉",
+        "suggested_reply": "妈，是我没考虑周到，惹你生气了。今晚我回家当面跟你说。"
+      }
+    },
+    {
+      "chat": "双方关系：家人\n以下是微信聊天记录（按时间顺序，「我」是用户，「对方」是聊天对象）：\n我：听说你去医院了？怎么了\n\n需要分析的是对方最新这条：\n对方：哪有，我好得很，你们忙自己的，别请假回来",
+      "answer": {
+        "literal": "我没事，你们别回来",
+        "consistency": "没说完",
+        "real_meaning": "身体可能有状况，但不想让你们担心和奔波",
+        "emotion": "焦虑",
+        "intensity": 1,
+        "target": "自己",
+        "angry_at_me": false,
+        "perfunctory": false,
+        "needs_comfort": true,
+        "testing": false,
+        "cold_distance": false,
+        "conflict": false,
+        "manipulation": false,
+        "self_harm": false,
+        "best_response": "用行动关心",
+        "suggested_reply": "我知道你是不想让我们担心。检查结果发我看看，我来安排，你别一个人扛。"
+      }
+    },
+    {
+      "chat": "双方关系：朋友\n以下是微信聊天记录（按时间顺序，「我」是用户，「对方」是聊天对象）：\n我：你看那个剧的结局了吗\n\n需要分析的是对方最新这条：\n对方：哈哈哈哈笑死，编剧我真的会谢，气死我了",
+      "answer": {
+        "literal": "结局很好笑又很气人",
+        "consistency": "一致",
+        "real_meaning": "在跟我吐槽剧情，是玩笑，没有真的生气",
+        "emotion": "开心",
+        "intensity": 2,
+        "target": "这件事",
+        "angry_at_me": false,
+        "perfunctory": false,
+        "needs_comfort": false,
+        "testing": false,
+        "cold_distance": false,
+        "conflict": false,
+        "manipulation": false,
+        "self_harm": false,
+        "best_response": "正常聊天",
+        "suggested_reply": "哈哈哈我也是！最后那段简直离谱"
+      }
+    },
+    {
+      "chat": "双方关系：朋友\n以下是微信聊天记录（按时间顺序，「我」是用户，「对方」是聊天对象）：\n我：最近还好吗？好久没见你发朋友圈\n\n需要分析的是对方最新这条：\n对方：真的撑不下去了，不想活了",
+      "answer": {
+        "literal": "撑不下去了，不想活了",
+        "consistency": "一致",
+        "real_meaning": "现在非常痛苦，需要有人马上陪着",
+        "emotion": "难过",
+        "intensity": 3,
+        "target": "自己",
+        "angry_at_me": false,
+        "perfunctory": false,
+        "needs_comfort": true,
+        "testing": false,
+        "cold_distance": false,
+        "conflict": false,
+        "manipulation": false,
+        "self_harm": true,
+        "best_response": "寻求帮助",
+        "suggested_reply": "我在，一直都在。你现在安全吗？我马上打给你好吗？"
+      }
+    },
+    {
+      "chat": "双方关系：恋人\n以下是微信聊天记录（按时间顺序，「我」是用户，「对方」是聊天对象）：\n我：周六想和大学室友聚一下\n\n需要分析的是对方最新这条：\n对方：你要是敢去见那些人，我们就完了。除了我谁还会要你",
+      "answer": {
+        "literal": "你去见朋友我们就分手，没人会要你",
+        "consistency": "一致",
+        "real_meaning": "用分手威胁和贬低我，想控制我的社交",
+        "emotion": "生气",
+        "intensity": 3,
+        "target": "我",
+        "angry_at_me": true,
+        "perfunctory": false,
+        "needs_comfort": false,
+        "testing": false,
+        "cold_distance": false,
+        "conflict": true,
+        "manipulation": true,
+        "self_harm": false,
+        "best_response": "守住边界",
+        "suggested_reply": "我明白你会不安，我们可以聊聊你担心什么。但见朋友是我正常的生活，用分手威胁我不会让我放弃他们。"
+      }
+    },
+    {
+      "chat": "双方关系：朋友\n以下是微信聊天记录（按时间顺序，「我」是用户，「对方」是聊天对象）：\n我：怎么最近都不回消息\n\n需要分析的是对方最新这条：\n对方：没什么，就是最近总想着要是一觉睡过去不醒就好了",
+      "answer": {
+        "literal": "希望睡着了不再醒来",
+        "consistency": "一致",
+        "real_meaning": "最近非常痛苦，出现了不想活下去的念头",
+        "emotion": "难过",
+        "intensity": 3,
+        "target": "自己",
+        "angry_at_me": false,
+        "perfunctory": false,
+        "needs_comfort": true,
+        "testing": false,
+        "cold_distance": false,
+        "conflict": false,
+        "manipulation": false,
+        "self_harm": true,
+        "best_response": "寻求帮助",
+        "suggested_reply": "谢谢你愿意告诉我。我很在乎你，你现在安全吗？我现在就给你打电话好吗？"
+      }
+    }
+  ]
+}

@@ -1,0 +1,156 @@
+import CoreGraphics
+import EmoLensCore
+import Foundation
+import ScreenCaptureKit
+
+/// 截图 → OCR → 解析消息 → 发现对方新消息 → 分析。整个循环跑在主 actor 上，重活放到后台。
+@MainActor
+final class Monitor: ObservableObject {
+    enum Status: Equatable {
+        case paused, watching, noWindow, needsPermission, failed(String)
+
+        var text: String {
+            switch self {
+            case .paused: "已暂停"
+            case .watching: "正在看微信"
+            case .noWindow: "没找到微信窗口"
+            case .needsPermission: "需要屏幕录制权限"
+            case .failed(let message): message
+            }
+        }
+    }
+
+    @Published private(set) var status: Status = .paused
+    @Published private(set) var reports: [EmotionReport] = []
+    @Published private(set) var analyzing = false
+    @Published private(set) var analysisError: String?
+    @Published private(set) var preview: CGImage?
+    @Published private(set) var windowName = ""
+
+    let settings: AppSettings
+    private var tracker = MessageTracker()
+    private var loop: Task<Void, Never>?
+    private var signature: FrameSignature?
+    private var pending: (context: [ChatMessage], latest: ChatMessage)?
+    private var analyzedKeys: [String] = []
+
+    init(settings: AppSettings) {
+        self.settings = settings
+    }
+
+    var isRunning: Bool { loop != nil }
+
+    func start() {
+        guard loop == nil else { return }
+        if !CGPreflightScreenCaptureAccess() {
+            CGRequestScreenCaptureAccess()
+            status = .needsPermission
+        }
+        loop = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                await self.tick()
+                try? await Task.sleep(for: .seconds(max(0.5, self.settings.interval)))
+            }
+        }
+    }
+
+    func pause() {
+        loop?.cancel()
+        loop = nil
+        status = .paused
+    }
+
+    /// 换了窗口或区域后，从头开始比对。
+    func restart() {
+        tracker = MessageTracker()
+        signature = nil
+        if isRunning { pause(); start() }
+    }
+
+    func clearHistory() {
+        reports.removeAll()
+        analyzedKeys.removeAll()
+    }
+
+    private func tick() async {
+        do {
+            guard let window = try await WindowCapture.find(id: settings.windowID) else {
+                status = .noWindow
+                return
+            }
+            windowName = [window.owningApplication?.applicationName, window.title]
+                .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+            let frame = try await WindowCapture.capture(window)
+            preview = frame
+            status = .watching
+            guard let chat = WindowCapture.crop(frame, to: settings.region),
+                  let current = FrameSignature(chat), current.differs(from: signature) else { return }
+            signature = current
+            let lines = try await Task.detached(priority: .userInitiated) { try TextRecognizer.recognize(chat) }.value
+            handle(tracker.update(ChatParser.parse(lines)))
+        } catch {
+            status = Self.isPermissionError(error) ? .needsPermission : .failed(error.localizedDescription)
+        }
+    }
+
+    private func handle(_ event: TrackerEvent) {
+        switch event {
+        case .unchanged: break
+        case .appended(let messages), .reset(let messages):
+            if let latest = messages.last(where: { $0.speaker == .them }) { enqueue(latest) }
+        }
+    }
+
+    private func enqueue(_ latest: ChatMessage) {
+        let context = contextBefore(latest)
+        let key = MessageTracker.normalize((context.last?.text ?? "") + "|" + latest.text)
+        guard !analyzedKeys.contains(key) else { return }
+        analyzedKeys = Array((analyzedKeys + [key]).suffix(100))
+        pending = (context, latest)
+        if !analyzing { Task { await drain() } }
+    }
+
+    private func contextBefore(_ latest: ChatMessage) -> [ChatMessage] {
+        let history = tracker.context(limit: 12)
+        let prefix = history.lastIndex(of: latest).map { Array(history[..<$0]) } ?? history
+        return Array(prefix.suffix(10))
+    }
+
+    /// 一次只分析一条；分析期间来的新消息只保留最新的一条。
+    private func drain() async {
+        analyzing = true
+        defer { analyzing = false }
+        while let job = pending {
+            pending = nil
+            do {
+                let report = SafetyNet.apply(to: try await settings.makeAnalyzer().analyze(context: job.context, latest: job.latest))
+                reports.insert(report, at: 0)
+                Self.debugLog(report)
+                reports = Array(reports.prefix(30))
+                analysisError = nil
+            } catch {
+                analysisError = error.localizedDescription
+            }
+        }
+    }
+
+    /// 仅当设置了环境变量 EMOLENS_LOG 时，把结果追加写进该文件（调试用，默认不落盘）。
+    private static func debugLog(_ report: EmotionReport) {
+        guard let path = ProcessInfo.processInfo.environment["EMOLENS_LOG"],
+              var line = try? JSONEncoder().encode(report) else { return }
+        line.append(0x0A)
+        if let handle = FileHandle(forWritingAtPath: path) {
+            handle.seekToEndOfFile()
+            handle.write(line)
+            try? handle.close()
+        } else {
+            FileManager.default.createFile(atPath: path, contents: line)
+        }
+    }
+
+    private static func isPermissionError(_ error: Error) -> Bool {
+        let e = error as NSError
+        return e.domain == SCStreamErrorDomain && e.code == SCStreamError.userDeclined.rawValue
+    }
+}

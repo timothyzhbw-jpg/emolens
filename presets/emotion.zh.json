@@ -7,6 +7,7 @@
     "intensity": "情绪强度",
     "angry_at_me": "在生我的气",
     "sarcasm": "反话 / 阴阳怪气",
+    "perfunctory": "敷衍 / 不想争了",
     "needs_comfort": "需要安慰",
     "testing": "在试探我",
     "cold_distance": "冷淡疏远",
@@ -35,7 +36,12 @@
     "intensity": {
       "type": "score",
       "instructions": "对方最新这条消息的情绪有多强烈？",
-      "criteria": ["几乎没有情绪", "轻微", "明显", "非常强烈"]
+      "criteria": [
+        "几乎没有情绪",
+        "轻微",
+        "明显",
+        "非常强烈"
+      ]
     },
     "angry_at_me": {
       "type": "noul",
@@ -44,6 +50,10 @@
     "sarcasm": {
       "type": "noul",
       "instructions": "对方是否在说反话或阴阳怪气，字面意思和真实想法相反？例如嘴上说「没事」「随便」「你开心就好」，其实心里不满。"
+    },
+    "perfunctory": {
+      "type": "noul",
+      "instructions": "对方是否在敷衍，或者已经不想争了？例如只回「哦」「嗯」「都行」「你看着办」，并不代表真的同意。"
     },
     "needs_comfort": {
       "type": "noul",
