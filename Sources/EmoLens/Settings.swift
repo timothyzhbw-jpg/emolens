@@ -62,6 +62,8 @@ final class AppSettings: ObservableObject {
     @Published var relationship: String { didSet { defaults.set(relationship, forKey: "relationship") } }
     @Published var interval: Double { didSet { defaults.set(interval, forKey: "interval") } }
     /// 分析时参考联系人记忆；把分析结果自动记进联系人记忆。
+    /// 本地模型没在跑时自动执行 ollama serve（只对本机地址生效；永远不会自动改用云端模型）。
+    @Published var autoStartOllama: Bool { didSet { defaults.set(autoStartOllama, forKey: "autoStartOllama") } }
     @Published var useMemory: Bool { didSet { defaults.set(useMemory, forKey: "useMemory") } }
     @Published var autoRecordMemory: Bool { didSet { defaults.set(autoRecordMemory, forKey: "autoRecordMemory") } }
     @Published var windowID: CGWindowID { didSet { defaults.set(Int(windowID), forKey: "windowID") } }
@@ -84,6 +86,7 @@ final class AppSettings: ObservableObject {
         anthropicKey = Keychain.read("anthropic")
         relationship = defaults.string(forKey: "relationship") ?? "不确定"
         interval = defaults.object(forKey: "interval") as? Double ?? 1.5
+        autoStartOllama = defaults.object(forKey: "autoStartOllama") as? Bool ?? true
         useMemory = defaults.object(forKey: "useMemory") as? Bool ?? true
         autoRecordMemory = defaults.object(forKey: "autoRecordMemory") as? Bool ?? true
         windowID = CGWindowID(defaults.integer(forKey: "windowID"))

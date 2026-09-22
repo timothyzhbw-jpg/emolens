@@ -133,6 +133,9 @@ struct SettingsView: View {
         case .ollama:
             TextField("Ollama 地址", text: $settings.ollamaURL)
             TextField("模型", text: $settings.ollamaModel)
+            Toggle("没在运行时自动启动 Ollama", isOn: $settings.autoStartOllama)
+            Text("只对本机地址生效。本地起不来时会如实报错，不会自动改用云端模型。")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
         case .openai:
             Picker("服务", selection: Binding(get: { settings.openAIPreset }, set: { settings.applyOpenAIPreset($0) })) {
                 ForEach(OpenAIPreset.all) { Text($0.name).tag($0.id) }

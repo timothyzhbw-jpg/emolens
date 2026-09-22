@@ -30,6 +30,9 @@ final class Monitor: ObservableObject {
     @Published private(set) var analysisError: String?
     @Published private(set) var preview: CGImage?
     @Published private(set) var windowName = ""
+    /// 本地模型的状态：是否正在启动，以及启动结果。
+    @Published private(set) var startingOllama = false
+    @Published private(set) var ollamaStatus: OllamaLauncher.Status?
 
     let settings: AppSettings
     let memory: ContactMemoryStore
@@ -47,6 +50,8 @@ final class Monitor: ObservableObject {
     private var failed: Job?
     private var previewRunning = false
     private var analyzedKeys: [String] = []
+    private var ollamaChecked = false
+    private var ollamaRetried = false
     /// 被监控窗口自己的应用名和标题（识别联系人时排除）。
     private var windowTitles: [String] = []
 
@@ -241,12 +246,28 @@ final class Monitor: ObservableObject {
         return Array(prefix.suffix(10))
     }
 
+    /// 本地模型没在跑就自动拉起来。绝不会自动改用云端模型：聊天内容发不发出去只能由用户决定。
+    private func ensureLocalModel(force: Bool = false) async {
+        guard settings.autoStartOllama, settings.engine != .systemOne, settings.llmProvider == .ollama else { return }
+        guard force || !ollamaChecked else { return }
+        ollamaChecked = true
+        guard let url = URL(string: settings.ollamaURL.trimmingCharacters(in: .whitespaces)) else { return }
+        if await OllamaLauncher.ping(url) { ollamaStatus = .running; return }
+        startingOllama = true
+        defer { startingOllama = false }
+        log.notice("starting ollama serve")
+        let status = await OllamaLauncher(baseURL: url).ensureRunning()
+        ollamaStatus = status
+        log.notice("ollama: \(String(describing: status), privacy: .public)")
+    }
+
     /// 一次只分析一条；分析期间来的新消息只保留最新的一条。
     private func drain() async {
         analyzing = true
         defer { analyzing = false }
         while let job = pending {
             pending = nil
+            await ensureLocalModel()
             do {
                 let contactMemory = job.contact.map(memory.memory(for:))
                 let summary = settings.useMemory ? contactMemory?.promptSummary() : nil
@@ -261,6 +282,12 @@ final class Monitor: ObservableObject {
                 analysisError = nil
                 failed = nil
                 log.notice("analysis done in \(Int(report.latencyMs)) ms by \(report.engine, privacy: .public)")
+            } catch let error as URLError where Self.isConnectionError(error) && !ollamaRetried
+                && settings.llmProvider == .ollama && settings.autoStartOllama {
+                // 本地模型可能刚被关掉：拉起来再试一次这条。
+                ollamaRetried = true
+                await ensureLocalModel(force: true)
+                pending = job
             } catch {
                 // 错误信息里可能带着模型输出（即聊天内容），只公开类别，细节标为隐私。
                 log.error("analysis failed: \(Self.category(error), privacy: .public) \(error.localizedDescription, privacy: .private)")
@@ -297,6 +324,10 @@ final class Monitor: ObservableObject {
         default:
             return error.localizedDescription
         }
+    }
+
+    static func isConnectionError(_ error: URLError) -> Bool {
+        [.cannotConnectToHost, .cannotFindHost, .networkConnectionLost, .notConnectedToInternet].contains(error.code)
     }
 
     /// 可以公开写进系统日志的错误类别（不含任何聊天内容）。

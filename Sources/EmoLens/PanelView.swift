@@ -568,6 +568,18 @@ struct Notices: View {
         } else if case .failed(let message) = monitor.status {
             Notice(symbol: "exclamationmark.triangle", tint: .orange, title: "截图出错了", text: message) { EmptyView() }
         }
+        if monitor.startingOllama {
+            Notice(symbol: "hourglass", tint: .blue, title: "正在启动本地模型",
+                   text: "第一次启动 Ollama 要几秒，之后就一直在后台跑了。") { EmptyView() }
+        } else if monitor.ollamaStatus == .missingBinary {
+            Notice(symbol: "shippingbox", tint: .orange, title: "没找到 ollama 命令",
+                   text: "装好 Ollama 就能自动启动本地模型。也可以在设置里换成云端模型——但那样聊天内容会发送给服务商。") {
+                Button("去下载 Ollama") { NSWorkspace.shared.open(URL(string: "https://ollama.com/download")!) }
+                    .buttonStyle(PillButtonStyle(tint: .orange))
+            }
+        } else if case .failed(let message) = monitor.ollamaStatus {
+            Notice(symbol: "exclamationmark.triangle", tint: .orange, title: "本地模型没能启动", text: message) { EmptyView() }
+        }
         if let error = monitor.analysisError {
             Notice(symbol: "bolt.horizontal.circle", tint: .orange, title: "这条消息没分析成功", text: error) {
                 if monitor.canRetry {

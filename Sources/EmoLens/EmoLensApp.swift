@@ -44,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let settings = AppSettings()
     private lazy var monitor = Monitor(settings: settings)
     private var panel: NSPanel?
+    private var statusItem: NSStatusItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = Self.makeMenu()
@@ -57,20 +58,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.isMovableByWindowBackground = true
         panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
         panel.standardWindowButton(.zoomButton)?.isHidden = true
-        panel.level = .floating
+        // .statusBar 而不是 .floating：普通浮动层级不会出现在别的应用的全屏空间之上。
+        panel.level = .statusBar
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        // 跟着你走：切到别的桌面空间、或别的应用全屏时，面板都要跟过去。
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        panel.isReleasedWhenClosed = false
         panel.sharingType = .none   // 自己的面板不出现在任何截图 / 共享屏幕里
         panel.contentView = Self.frosted(NSHostingView(rootView: PanelView(monitor: monitor, settings: settings)))
         if let screen = NSScreen.main?.visibleFrame {
             panel.setFrameOrigin(NSPoint(x: screen.maxX - 392, y: screen.maxY - 720))
         }
         panel.delegate = self
-        panel.makeKeyAndOrderFront(nil)
         self.panel = panel
-        NSApp.activate()
+        setUpStatusItem()
+        showPanel()
         monitor.start()
+    }
+
+    /// 把面板显示出来并置前。被隐藏过（⌘H）也能恢复，所以不会出现「应用在跑但看不到窗口」。
+    @objc func showPanel() {
+        guard let panel else { return }
+        NSApp.unhide(nil)
+        // 每次显示都重新声明一遍：切换空间或全屏后，这些行为偶尔会失效。
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        panel.level = .statusBar
+        panel.orderFrontRegardless()
+        panel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// 再次打开应用（比如点 Dock 图标）时，把面板叫回来而不是什么都不做。
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        showPanel()
+        return true
+    }
+
+    /// 菜单栏图标：面板被关掉或隐藏后，从这里随时叫回来。
+    private func setUpStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        item.button?.image = NSImage(systemSymbolName: "eye.fill", accessibilityDescription: "情绪透镜")
+        let menu = NSMenu()
+        menu.addItem(withTitle: "显示面板", action: #selector(showPanel), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "暂停 / 继续监控", action: #selector(toggleMonitoring), keyEquivalent: "").target = self
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "退出 EmoLens", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        item.menu = menu
+        statusItem = item
+    }
+
+    @objc private func toggleMonitoring() {
+        monitor.isRunning ? monitor.pause() : monitor.start()
     }
 
     /// 毛玻璃底：半透明，能隐约看到后面的窗口。

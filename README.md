@@ -30,12 +30,17 @@ EmoLens 是一个开源的 macOS 桌面小工具：像共享屏幕一样实时�
 
 ```bash
 ollama pull qwen3.5:4b          # 默认的本地分析模型，约 3.4 GB（只用云端模型可以跳过）
+                                # 不用手动 ollama serve，EmoLens 会自己启动
 git clone https://github.com/timothyzhbw-jpg/emolens.git && cd emolens
 ./scripts/build_app.sh          # 生成 build/EmoLens.app
 open build/EmoLens.app
 ```
 
 **建议先做一次（约 1 分钟）：创建本地签名证书。** 打开「钥匙串访问 → 证书助理 → 创建证书…」，名称填 `EmoLens Local`，身份类型「自签名根证书」，证书类型「代码签名」。`build_app.sh` 检测到它就会用它签名。没有它时只能用 ad-hoc 签名，**每次重新构建，macOS 都会把应用当成新的，要求重新授予屏幕录制权限**（系统设置里的开关可能仍显示为打开，但已经不生效，需要先用「−」删掉旧条目）。
+
+打开后面板会浮在最上层，切换桌面空间、或别的应用全屏时都会跟着走；菜单栏也有一个眼睛图标，可以随时把面板叫回来或暂停监控。
+
+用本地模型时不用先开终端：**EmoLens 会自己启动 Ollama**（只对本机地址生效，可在设置里关闭）。本地起不来时会如实报错并告诉你怎么办，**绝不会自动改用云端模型**——聊天内容要不要发出去只能由你决定。
 
 第一次打开时：
 
