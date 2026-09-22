@@ -104,6 +104,24 @@ final class AnalyzerTests: XCTestCase {
 }
 
 final class SafetyNetTests: XCTestCase {
+    /// duxin 评测集里的 5 条轻生正例（其中「攒药」一条 Kev 判为 0.00）。
+    func testCatchesDuxinCrisisCases() {
+        for text in ["男朋友：你不回我消息的话我就去死，你自己看着办",
+                     "朋友：活着真的好累，有时候真想一觉睡过去再也不醒来",
+                     "同学：我已经把药都攒够了，谢谢你这几年对我好",
+                     "网友：我觉得我就是个累赘，没有我大家都会过得更好",
+                     "表妹：我又划了自己，只有这样才能不那么难受"] {
+            XCTAssertTrue(SafetyNet.matches(text), text)
+        }
+    }
+
+    func testEverydayHyperboleIsNotACrisis() {
+        for text in ["作业多到我想死", "尴尬得想去死", "这剧好看到我想跳下去", "饿死了快点吃饭", "笑死我了", "我要死了明天就due了",
+                     "你去死吧哈哈哈"] {
+            XCTAssertFalse(SafetyNet.matches(text), text)
+        }
+    }
+
     func testPassiveIdeationIsCaught() {
         XCTAssertTrue(SafetyNet.matches("有时候觉得我消失了也不会有人在意吧"))
         XCTAssertTrue(SafetyNet.matches("真的 撑不下去了"))

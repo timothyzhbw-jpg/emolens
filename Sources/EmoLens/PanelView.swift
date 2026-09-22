@@ -175,8 +175,9 @@ struct ReportView: View {
     let analyzing: Bool
     var suggestion: MemorySuggestion? = nil
 
-    private var flags: [EmotionFlag] { report.activeFlags() }
-    private var selfHarm: Bool { flags.contains(.selfHarm) }
+    private var selfHarm: Bool { report.activeFlags().contains(.selfHarm) }
+    /// 有轻生信号时不显示「情感操控」：给说「我是累赘」的人贴操控标签是有害的，这时先确认 TA 的安全。
+    private var flags: [EmotionFlag] { report.activeFlags().filter { !(selfHarm && $0 == .manipulation) } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
