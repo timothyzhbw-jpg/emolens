@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import EmoLensCore
 import ScreenCaptureKit
@@ -8,69 +9,144 @@ struct SettingsView: View {
     @ObservedObject var settings: AppSettings
     @Environment(\.dismiss) private var dismiss
     @State private var windows: [WindowOption] = []
+    @State private var check: CheckState = .idle
+
+    enum CheckState: Equatable { case idle, checking, ok(String), failed(String) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("设置").font(.title3.weight(.semibold))
-
-            GroupBox("要看的窗口") {
-                HStack {
-                    Picker("", selection: $settings.windowID) {
-                        Text("自动（最大的微信窗口）").tag(CGWindowID(0))
-                        ForEach(windows) { Text($0.name).tag($0.id) }
-                    }
-                    .labelsHidden()
-                    Button("刷新") { Task { await loadWindows() } }
+        VStack(spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("设置").font(.system(size: 17, weight: .semibold))
+                    Text("选好窗口、框出聊天区域，再选分析引擎").font(.system(size: 11.5)).foregroundStyle(.secondary)
                 }
+                Spacer()
             }
+            .padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 4)
 
-            GroupBox("聊天区域：在截图上拖一个框，只框住消息气泡那一栏") {
-                VStack(alignment: .leading, spacing: 6) {
-                    RegionPicker(image: monitor.preview, region: $settings.region)
+            Form {
+                Section("要看的窗口") {
                     HStack {
-                        Text("左侧的会话列表和底部输入框不要框进去，识别会更准。").font(.caption2).foregroundStyle(.secondary)
-                        Spacer()
-                        Button("整个窗口") { settings.region = CGRect(x: 0, y: 0, width: 1, height: 1) }
+                        Picker("窗口", selection: $settings.windowID) {
+                            Text("自动：最大的微信窗口").tag(CGWindowID(0))
+                            ForEach(windows) { option in
+                                Text(option.name).tag(option.id)
+                            }
+                        }
+                        Button("刷新") { Task { await loadWindows() } }
                     }
                 }
-            }
 
-            GroupBox("分析引擎") {
-                VStack(alignment: .leading, spacing: 8) {
-                    Picker("", selection: $settings.engine) {
-                        ForEach(EngineKind.allCases) { Text($0.title).tag($0) }
+                Section {
+                    RegionPicker(image: monitor.preview, region: $settings.region)
+                        .frame(maxWidth: .infinity)
+                    HStack {
+                        Text("只框住消息气泡那一栏，不要框左侧会话列表和底部输入框。")
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("用整个窗口") { settings.region = CGRect(x: 0, y: 0, width: 1, height: 1) }
                     }
-                    .pickerStyle(.radioGroup).labelsHidden()
+                } header: {
+                    Text("聊天区域")
+                }
+
+                Section("分析引擎") {
+                    Picker("引擎", selection: $settings.engine) {
+                        ForEach(EngineKind.allCases) { kind in
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(kind.name)
+                                Text(kind.detail).font(.system(size: 11)).foregroundStyle(.secondary)
+                            }
+                            .tag(kind)
+                        }
+                    }
+                    .pickerStyle(.radioGroup)
+                    .onChange(of: settings.engine) { check = .idle }
                     if settings.engine != .systemOne {
                         TextField("Ollama 地址", text: $settings.ollamaURL)
                         TextField("模型", text: $settings.ollamaModel)
                     }
                     if settings.engine != .llm {
-                        TextField("System One（Kev）服务地址", text: $settings.systemOneURL)
+                        TextField("Kev（System One）地址", text: $settings.systemOneURL)
+                    }
+                    HStack {
+                        Button("测试连接") { Task { await testConnection() } }
+                            .disabled(check == .checking)
+                        checkLabel
                     }
                 }
-                .textFieldStyle(.roundedBorder)
+
+                Section("其他") {
+                    LabeledContent("截图间隔") {
+                        HStack {
+                            Slider(value: $settings.interval, in: 0.5...5, step: 0.5).frame(width: 160)
+                            Text("\(settings.interval, specifier: "%.1f") 秒").monospacedDigit().frame(width: 44, alignment: .trailing)
+                        }
+                    }
+                    LabeledContent("分析记录") {
+                        Button("清空", role: .destructive) { monitor.clearHistory() }
+                    }
+                }
             }
+            .formStyle(.grouped)
 
             HStack {
-                Text("截图间隔 \(settings.interval, specifier: "%.1f") 秒")
-                Slider(value: $settings.interval, in: 0.5...5, step: 0.5)
-            }
-
-            HStack {
-                Button("清空记录") { monitor.clearHistory() }
+                Text("所有处理都在本机完成").font(.system(size: 11)).foregroundStyle(.tertiary)
                 Spacer()
-                Button("完成") { monitor.restart(); dismiss() }.keyboardShortcut(.defaultAction)
+                Button("完成") { monitor.restart(); dismiss() }
+                    .keyboardShortcut(.defaultAction)
+                    .controlSize(.large)
             }
+            .padding(.horizontal, 20).padding(.vertical, 14)
         }
-        .padding(18)
-        .frame(width: 440)
+        .frame(width: 480, height: 700)
         .task { await loadWindows() }
+    }
+
+    @ViewBuilder private var checkLabel: some View {
+        switch check {
+        case .idle: EmptyView()
+        case .checking: Text("连接中…").foregroundStyle(.secondary)
+        case .ok(let text): Label(text, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+        case .failed(let text): Label(text, systemImage: "xmark.octagon.fill").foregroundStyle(.red)
+        }
     }
 
     private func loadWindows() async {
         let found = (try? await WindowCapture.windows()) ?? []
-        windows = found.map { WindowOption(window: $0) }.sorted { $0.name < $1.name }
+        windows = found.map(WindowOption.init).sorted { $0.name < $1.name }
+    }
+
+    /// 只读地探测引擎：Ollama 查模型列表，Kev 查 /v1/models。
+    private func testConnection() async {
+        check = .checking
+        var results: [String] = []
+        do {
+            if settings.engine != .systemOne {
+                let data = try await get(settings.ollamaURL, path: "api/tags")
+                let names = ((try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["models"] as? [[String: Any]])?
+                    .compactMap { $0["name"] as? String } ?? []
+                guard names.contains(settings.ollamaModel) else {
+                    check = .failed("Ollama 里没有 \(settings.ollamaModel)，先运行 ollama pull \(settings.ollamaModel)")
+                    return
+                }
+                results.append("Ollama 正常")
+            }
+            if settings.engine != .llm {
+                _ = try await get(settings.systemOneURL, path: "v1/models")
+                results.append("Kev 正常")
+            }
+            check = .ok(results.joined(separator: "，"))
+        } catch {
+            check = .failed("连不上：\(error.localizedDescription)")
+        }
+    }
+
+    private func get(_ base: String, path: String) async throws -> Data {
+        guard let url = URL(string: base)?.appending(path: path) else { throw URLError(.badURL) }
+        let (data, response) = try await URLSession.shared.data(from: url)
+        if let http = response as? HTTPURLResponse, http.statusCode != 200 { throw URLError(.badServerResponse) }
+        return data
     }
 }
 
@@ -82,10 +158,9 @@ struct WindowOption: Identifiable {
         id = window.windowID
         let app = window.owningApplication?.applicationName ?? "未知应用"
         let title = window.title ?? ""
-        name = title.isEmpty ? app : "\(app) · \(title)"
+        name = title.isEmpty || title == app ? app : "\(app) · \(title)"
     }
 }
-
 
 /// 在窗口截图上拖框选择区域，结果为归一化坐标（原点左上）。
 struct RegionPicker: View {
@@ -93,26 +168,34 @@ struct RegionPicker: View {
     @Binding var region: CGRect
     @State private var dragging: CGRect?
 
-    private let width: CGFloat = 404
+    private let width: CGFloat = 420
 
     var body: some View {
         if let image {
-            let height = width * CGFloat(image.height) / CGFloat(image.width)
-            let size = CGSize(width: width, height: height)
+            let height = min(360, width * CGFloat(image.height) / CGFloat(image.width))
+            let size = CGSize(width: height * CGFloat(image.width) / CGFloat(image.height), height: height)
+            let shown = scaled(dragging ?? region, to: size)
             ZStack(alignment: .topLeading) {
-                Image(decorative: image, scale: 1).resizable().frame(width: width, height: height)
-                let shown = scaled(dragging ?? region, to: size)
+                Image(decorative: image, scale: 1).resizable().frame(width: size.width, height: size.height)
                 Path { path in
                     path.addRect(CGRect(origin: .zero, size: size))
                     path.addRect(shown)
                 }
-                .fill(Color.black.opacity(0.45), style: FillStyle(eoFill: true))
-                Rectangle().stroke(Color.accentColor, lineWidth: 2)
+                .fill(Color.black.opacity(0.5), style: FillStyle(eoFill: true))
+                RoundedRectangle(cornerRadius: 3)
+                    .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: dragging == nil ? [] : [6, 4]))
                     .frame(width: shown.width, height: shown.height)
                     .offset(x: shown.minX, y: shown.minY)
+                if dragging == nil && region == CGRect(x: 0, y: 0, width: 1, height: 1) {
+                    Text("按住鼠标拖一个框")
+                        .font(.system(size: 12, weight: .medium)).foregroundStyle(.white)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(Capsule().fill(Color.black.opacity(0.6)))
+                        .frame(width: size.width, height: size.height)
+                }
             }
-            .frame(width: width, height: height)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .frame(width: size.width, height: size.height)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .gesture(
                 DragGesture(minimumDistance: 4)
                     .onChanged { dragging = normalized(from: $0.startLocation, to: $0.location, in: size) }
@@ -122,9 +205,11 @@ struct RegionPicker: View {
                     }
             )
         } else {
-            Text("还没有截图。确认微信开着，并已允许屏幕录制权限。")
-                .font(.caption).foregroundStyle(.secondary)
-                .frame(width: width, height: 120)
+            VStack(spacing: 6) {
+                Image(systemName: "rectangle.dashed").font(.system(size: 22)).foregroundStyle(.tertiary)
+                Text("还没有截图：确认微信开着，并已允许屏幕录制权限").font(.system(size: 11.5)).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, minHeight: 140)
         }
     }
 

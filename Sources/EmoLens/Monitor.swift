@@ -35,13 +35,25 @@ final class Monitor: ObservableObject {
     private var loop: Task<Void, Never>?
     private var signature: FrameSignature?
     private var pending: (context: [ChatMessage], latest: ChatMessage)?
+    private var failed: (context: [ChatMessage], latest: ChatMessage)?
+    private var previewRunning = false
     private var analyzedKeys: [String] = []
 
     init(settings: AppSettings) {
         self.settings = settings
     }
 
-    var isRunning: Bool { loop != nil }
+    var isRunning: Bool { loop != nil || previewRunning }
+    var canRetry: Bool { failed != nil && !analyzing }
+
+    /// 重新分析上一条失败的消息。
+    func retry() {
+        guard let job = failed else { return }
+        failed = nil
+        analysisError = nil
+        pending = job
+        Task { await drain() }
+    }
 
     func start() {
         guard loop == nil else { return }
@@ -69,6 +81,19 @@ final class Monitor: ObservableObject {
         tracker = MessageTracker()
         signature = nil
         if isRunning { pause(); start() }
+    }
+
+    /// 预览渲染用：直接设定界面状态，不截图也不分析。
+    func loadPreview(status: Status, reports: [EmotionReport], analyzing: Bool = false,
+                     windowName: String = "微信", error: String? = nil, preview: CGImage? = nil) {
+        self.status = status
+        self.reports = reports
+        self.analyzing = analyzing
+        self.windowName = windowName
+        self.analysisError = error
+        self.preview = preview
+        self.previewRunning = status == .watching
+        if error != nil { failed = ([], ChatMessage(speaker: .them, text: "", top: 0)) }
     }
 
     func clearHistory() {
@@ -141,10 +166,12 @@ final class Monitor: ObservableObject {
                 Self.debugLog(report)
                 reports = Array(reports.prefix(30))
                 analysisError = nil
+                failed = nil
                 log.info("analysis done in \(Int(report.latencyMs)) ms by \(report.engine, privacy: .public)")
             } catch {
                 log.error("analysis failed: \(error.localizedDescription, privacy: .public)")
-                analysisError = error.localizedDescription
+                analysisError = describe(error)
+                failed = job
             }
         }
     }
@@ -160,6 +187,21 @@ final class Monitor: ObservableObject {
             try? handle.close()
         } else {
             FileManager.default.createFile(atPath: path, contents: line)
+        }
+    }
+
+    /// 把常见的网络错误翻成用户看得懂、知道怎么办的话。
+    private func describe(_ error: Error) -> String {
+        let engine = settings.engine
+        let fix = engine == .systemOne ? "请确认 Kev 服务在运行。"
+            : engine == .combined ? "请确认 Ollama（ollama serve）和 Kev 都在运行。" : "请先在终端运行 ollama serve。"
+        switch (error as? URLError)?.code {
+        case .cannotConnectToHost?, .cannotFindHost?, .networkConnectionLost?, .notConnectedToInternet?:
+            return "连不上分析引擎（\(engine.name)）。" + fix
+        case .timedOut?:
+            return "分析超时了：模型可能还在加载，或者内存不够。稍后点「重试」。"
+        default:
+            return error.localizedDescription
         }
     }
 

@@ -31,6 +31,15 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# ad-hoc 签名：本机可用；每次重新构建后，系统可能要求重新授予屏幕录制权限。
-codesign --force --deep --sign - "$APP"
-echo "✅ 已生成 $APP"
+# 签名：有稳定证书时用它（屏幕录制权限在重新构建后仍然有效）；没有就退回 ad-hoc。
+# 创建证书：钥匙串访问 → 证书助理 → 创建证书…，名称 "EmoLens Local"，类型「代码签名」。
+IDENTITY="${EMOLENS_SIGN_IDENTITY:-EmoLens Local}"
+if security find-certificate -c "$IDENTITY" >/dev/null 2>&1; then
+    codesign --force --deep --sign "$IDENTITY" "$APP"
+    echo "✅ 已生成 $APP（签名：$IDENTITY）"
+else
+    codesign --force --deep --sign - "$APP"
+    echo "✅ 已生成 $APP（ad-hoc 签名）"
+    echo "⚠️  ad-hoc 签名每次构建都会变，macOS 会要求重新授予屏幕录制权限。"
+    echo "   创建一次「$IDENTITY」代码签名证书即可避免，见 README。"
+fi

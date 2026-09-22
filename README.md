@@ -9,6 +9,11 @@ EmoLens 是一个开源的 macOS 桌面小工具：像共享屏幕一样实时�
 - 关系信号：在生我的气、敷衍 / 不想争了、需要安慰、在试探我、冷淡疏远、冷战 / 分手信号、**情感操控**、**自伤风险**
 - 建议的回应方式，以及一句可以直接发的回复
 
+<p align="center">
+  <img src="docs/screenshots/report.png" width="300" alt="读出反话和潜台词">
+  <img src="docs/screenshots/manipulation-dark.png" width="300" alt="识别情感操控（暗色模式）">
+</p>
+
 > 截图、文字识别、分析全部在你的电脑上完成，不上传任何聊天内容。EmoLens 不接入微信协议、不注入、不自动发消息，只读屏幕，因此不会导致封号。
 
 ```
@@ -26,6 +31,8 @@ git clone <本仓库地址> emolens && cd emolens
 ./scripts/build_app.sh          # 生成 build/EmoLens.app
 open build/EmoLens.app
 ```
+
+**建议先做一次（约 1 分钟）：创建本地签名证书。** 打开「钥匙串访问 → 证书助理 → 创建证书…」，名称填 `EmoLens Local`，身份类型「自签名根证书」，证书类型「代码签名」。`build_app.sh` 检测到它就会用它签名。没有它时只能用 ad-hoc 签名，**每次重新构建，macOS 都会把应用当成新的，要求重新授予屏幕录制权限**（系统设置里的开关可能仍显示为打开，但已经不生效，需要先用「−」删掉旧条目）。
 
 第一次打开时：
 
@@ -81,6 +88,8 @@ KEV_DTYPE=bf16 KEV_MERGE=0 uv run --extra serve python -m kev.serve --run jaredp
 - 用 `build_app.sh` 做的是 ad-hoc 签名，每次重新构建后，macOS 可能要求重新授予屏幕录制权限。
 - 目前只针对 Mac 版微信的布局调过参数；其他聊天软件只要是「对方靠左、我靠右」的布局，通常也能用。
 
+<p align="center"><img src="docs/screenshots/safety.png" width="300" alt="自伤风险提醒"></p>
+
 ## 负责任地使用
 
 - **这不是心理诊断工具**，也不能代替真诚的沟通。
@@ -103,7 +112,9 @@ Sources/EmoLensDemo/   仿微信演示聊天窗口
 presets/               问题集与提示词
 ```
 
-调试时可以设置 `EMOLENS_LOG=/path/to/reports.jsonl`，把每次分析结果追加写入该文件；默认不写任何文件。
+调试时可以设置 `EMOLENS_LOG=/path/to/reports.jsonl`，把每次分析结果追加写入该文件；默认不写任何文件。运行日志：`log stream --predicate 'subsystem == "io.github.emolens"'`（消息正文标为隐私，不会明文出现）。
+
+界面预览：`swift run EmoLens --render-previews docs/screenshots` 会用虚构的示例数据把各种状态（亮色 / 暗色）渲染成 PNG，不截屏、不需要任何权限。
 
 ## 致谢
 

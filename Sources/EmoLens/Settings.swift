@@ -6,11 +6,20 @@ enum EngineKind: String, CaseIterable, Identifiable {
     case llm, combined, systemOne
 
     var id: String { rawValue }
-    var title: String {
+
+    var name: String {
         switch self {
-        case .llm: "本地大模型（Ollama，读潜台词 + 回复建议）"
-        case .combined: "双引擎（大模型 + Kev 复核严重信号，约多占 10 GB 内存）"
-        case .systemOne: "决策模型（Kev，校准概率，较慢）"
+        case .llm: "本地大模型"
+        case .combined: "双引擎"
+        case .systemOne: "决策模型"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .llm: "Ollama · 能读潜台词、给回复建议（推荐）"
+        case .combined: "大模型 + Kev 复核严重信号，更稳，约多占 10 GB 内存"
+        case .systemOne: "Kev · 校准概率，读不懂潜台词，较慢"
         }
     }
 }
