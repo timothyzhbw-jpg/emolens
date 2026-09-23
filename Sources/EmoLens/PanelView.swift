@@ -593,7 +593,7 @@ struct Notices: View {
         }
         if let seconds = monitor.pendingVoice {
             Notice(symbol: "waveform", tint: .blue, title: seconds > 0 ? "对方发来一条 \(seconds) 秒的语音" : "对方发来一条语音",
-                   text: "EmoLens 听不到语音内容。在微信里右键这条语音 →「转文字」，转好后会自动接着分析。") { EmptyView() }
+                   text: "EmoLens 听不到语音内容。在微信里把它转成文字（右键语音 →「转文字」；新版微信也可以在设置里打开语音自动转文字），转好后会自动接着分析。") { EmptyView() }
         }
         if let error = monitor.analysisError {
             Notice(symbol: "bolt.horizontal.circle", tint: .orange, title: "这条消息没分析成功", text: error) {
