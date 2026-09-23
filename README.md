@@ -2,7 +2,7 @@
 
 **读懂对方那句「没事，你开心就好」。**
 
-EmoLens 是一个开源的 macOS 桌面小工具：像共享屏幕一样实时「看着」你的微信聊天窗口，读出对方刚发来的消息，分析情绪和潜台词，在一个悬浮面板里告诉你：
+EmoLens 是一个开源的 macOS 桌面小工具：像共享屏幕一样实时「看着」你的即时通讯聊天窗口，读出对方刚发来的消息，分析情绪和潜台词，在一个悬浮面板里告诉你：
 
 - 对方现在是什么情绪、有多强烈，情绪冲着谁
 - 字面意思和真实想法是否一致：**反话、撒娇、没说完**
@@ -17,10 +17,10 @@ EmoLens 是一个开源的 macOS 桌面小工具：像共享屏幕一样实时�
 
 > 默认情况下，截图、文字识别、分析全部在你的电脑上完成（本地 Ollama 模型），不上传任何聊天内容。你也可以在设置里换成 **OpenAI、Claude、DeepSeek、通义千问**等云端大模型：理解潜台词更准，但对方的消息和最近约 10 条上下文会发送给你选的服务商，面板底部会一直提示。
 >
-> EmoLens 不接入微信协议、不注入、不自动发消息，只读屏幕，因此不会导致封号。
+> EmoLens 不接入任何聊天软件的协议、不注入、不自动发消息，只读屏幕，因此不会导致封号。
 
 ```
-微信窗口 ──ScreenCaptureKit 截图──▶ Vision 中文 OCR ──▶ 按气泡左右位置区分「对方 / 我」
+聊天窗口 ──ScreenCaptureKit 截图──▶ Vision 中文 OCR ──▶ 按气泡左右位置区分「对方 / 我」
       ──▶ 检测到对方的新消息 ──▶ 本地模型分析 ──▶ 悬浮面板
 ```
 
@@ -70,7 +70,7 @@ open build/EmoLens.app
 2. 点面板右上角的齿轮，在窗口截图上**拖一个框，只框住消息气泡那一栏**（不要框左侧会话列表和底部输入框）。
 3. 在面板上选好你和对方的关系（恋人 / 家人 / 朋友 / 同事 / 同学）。同一句话在不同关系里意思不一样。
 
-没有微信、或不想拿真实聊天测试？运行演示聊天窗口，每 15 秒会「收到」一条新消息：
+不想拿真实聊天测试？运行演示聊天窗口，每 15 秒会「收到」一条新消息：
 
 ```bash
 swift run EmoLensDemo
@@ -84,8 +84,8 @@ swift run EmoLensDemo
 
 面板顶部可以切换：
 
-- **实时看微信**：像共享屏幕一样盯着聊天窗口，对方一发消息就自动分析。
-- **手动粘贴**：在微信里选中几条消息复制，粘到面板里点「分析这段」。不截屏、不需要屏幕录制权限，也不用开着微信——在手机上截的对话、别人转述的聊天记录都能分析。支持「小美：内容」和「小美 12:30」换行两种格式，认不出名字的行算作对方说的；一段里出现多个人时可以选谁是「对方」。
+- **实时看聊天**：像共享屏幕一样盯着聊天窗口，对方一发消息就自动分析。
+- **手动粘贴**：在聊天软件里选中几条消息复制，粘到面板里点「分析这段」。不截屏、不需要屏幕录制权限，也不用开着聊天软件——在手机上截的对话、别人转述的聊天记录都能分析。支持「小美：内容」和「小美 12:30」换行两种格式，认不出名字的行算作对方说的；一段里出现多个人时可以选谁是「对方」。
 
 ## 表情、表情包和语音
 
@@ -95,15 +95,15 @@ swift run EmoLensDemo
 |---|---|
 | 文字里夹着表情「好的🙂」 | `好的[表情：微笑]`：先把表情涂掉再认字（挨着表情的字最容易认错），再把表情单独截下来、放大，交给模型看是什么表情 |
 | 只发一个表情、一个表情包 | `[表情：捂脸]`、`[表情包：猫咪捂耳朵，写着「我不听」]`：以前这种消息 OCR 读不到字，整条会被漏掉 |
-| 语音，已经在微信里转了文字 | `[语音转文字] 那你到底几点回来`：按转出来的文字分析，同时告诉模型这是语音转的，可能有错字 |
-| 语音，还没转文字 | 面板提示「对方发来一条 6 秒的语音」。在微信里把它转成文字（右键语音 →「转文字」；4.1.8 起也可以在设置里打开语音自动转文字），转好后自动接着分析 |
+| 语音，已经转成了文字 | `[语音转文字] 那你到底几点回来`：按转出来的文字分析，同时告诉模型这是语音转的，可能有错字 |
+| 语音，还没转文字 | 面板提示「对方发来一条 6 秒的语音」。在聊天软件里把它转成文字（通常是右键语音 →「转文字」），转好后自动接着分析 |
 | 引用回复 | `那你几点回（引用：我：今晚加班）`：引用框不再被当成对方的新消息 |
 
 <p align="center"><img src="docs/screenshots/voice-emoji.png" width="300" alt="语音提示和表情分析"></p>
 
 看表情用的是分析时的同一个模型：默认的 `qwen3.5:4b` 本身能看图，每个表情多花约 0.7 秒，看过的会记住。模型不支持看图（比如 DeepSeek）时自动跳过，按 `[表情]` 分析。设置里可以关掉「看懂表情和表情包」。
 
-微信表情有自己的「潜规则」：「微笑」常常是无语或阴阳怪气，「捂脸」是尴尬，「旺柴」是开玩笑。聊天里出现表情或语音时，这些说明会附在给模型的消息后面；纯文字的聊天不附，分析和以前完全一样。
+聊天表情有自己的「潜规则」：「微笑」常常是无语或阴阳怪气，「捂脸」是尴尬，「旺柴」是开玩笑。聊天里出现表情或语音时，这些说明会附在给模型的消息后面；纯文字的聊天不附，分析和以前完全一样。
 
 排查识别问题：`EmoLens --inspect 截图.png` 会打印 OCR 结果、认出的气泡和拼好的消息；加 `--analyze` 再跑一遍看图和分析。截图只在本机处理。
 
@@ -171,7 +171,7 @@ KEV_DTYPE=bf16 KEV_MERGE=0 uv run --extra serve python -m kev.serve --run jaredp
 
 | 测试 | 结果 |
 |---|---|
-| 30 条微信消息分诊（类别 / 要回复 / 今天处理 / 诈骗 / 语气），另一个模型独立标注的一致率 149/150 | Kev 总体 83–85%，诈骗识别 97%；Laya 33% |
+| 30 条聊天消息分诊（类别 / 要回复 / 今天处理 / 诈骗 / 语气），另一个模型独立标注的一致率 149/150 | Kev 总体 83–85%，诈骗识别 97%；Laya 33% |
 | 8 条未出现在提示词里的情感对话（反话、敷衍、试探、自伤、口头禅、操控、报喜不报忧、正常） | 大模型主要判断正确 7/8；操控漏判，双引擎下由 Kev 补上（0.93）；消极自伤念头由安全网兜底 |
 | 44 条中文情感评测集（另一个项目标注，Grok 盲标一致率 95%），默认引擎 qwen3.5:4b | 自伤 5/5、操控 5/5，均零误报；冷淡 3/5；冷战 1/2（5 条误报）；**反话只有 2/5**；情绪类别 54%（全猜最多的一类 26%） |
 
@@ -198,13 +198,13 @@ EMOLENS_ENGINE=systemOne EMOLENS_KEV_URL=http://127.0.0.1:8009 swift run EmoLens
 
 ## 局限
 
-- **只看得到屏幕上的内容**：文字识别依赖框选的区域。语音要先在微信里转成文字；视频、文件、链接卡片只按上面的字处理；气泡、头像、昵称的识别是按微信的版面规律推断的，换了主题或字号偶尔会认错。
+- **只看得到屏幕上的内容**：文字识别依赖框选的区域。语音要先在聊天软件里转成文字；视频、文件、链接卡片只按上面的字处理；气泡、头像、昵称的识别是按常见聊天界面的版面规律推断的，换了软件、主题或字号偶尔会认错。
 - **小模型认表情不总是准**：😂 可能说成「大笑流汗」，🙄 有时说成「目瞪口呆」。表情包上有字时最准。
 - **只分析对方最新的一条**，上下文取最近约 10 条。切换聊天或往上翻页时会重新对齐。
 - **联系人名字靠识别标题栏**：聊天区域要框在名字下方才能认出来；认错或没认出时，在面板上点铅笔手动改。
 - **模型会犯错**：尤其是 4B 小模型，同一句话两次的结果可能不同。重要的判断请结合原话和你对对方的了解。
 - 没有创建 `EmoLens Local` 签名证书时，`build_app.sh` 只能做 ad-hoc 签名，每次重新构建后都要重新授予屏幕录制权限（见「快速开始」）。
-- 目前只针对 Mac 版微信的布局调过参数；其他聊天软件只要是「对方靠左、我靠右」的布局，通常也能用。
+- 适用于「对方靠左、我靠右」的聊天界面。设置里的「自动」会找正在开着的常见即时通讯软件，其他软件可以手动选窗口；Slack、Discord 这类所有人都靠左排的界面分不清谁是谁，不适用。
 
 <p align="center"><img src="docs/screenshots/safety.png" width="300" alt="自伤风险提醒"></p>
 
@@ -227,7 +227,7 @@ swift run EmoLens    # 直接运行（屏幕录制权限会记在终端名下）
 ```
 Sources/EmoLensCore/   纯逻辑：OCR 行 → 聊天消息、新消息检测、分析引擎（本地 / OpenAI 兼容 / Claude）、安全网
 Sources/EmoLens/       macOS 应用：截图、OCR、悬浮面板、设置
-Sources/EmoLensDemo/   仿微信演示聊天窗口
+Sources/EmoLensDemo/   演示聊天窗口
 presets/               问题集与提示词
 ```
 
@@ -249,4 +249,4 @@ presets/               问题集与提示词
 
 ---
 
-**English summary.** EmoLens is an open-source macOS floating-panel app that watches a chat window (WeChat by default) via ScreenCaptureKit, OCRs new messages locally with Apple Vision, and analyzes the other person's latest message with a local model (Ollama, optionally cross-checked by a System One decision model such as Kev): emotion, subtext (sarcasm / coy / unsaid), relationship signals including manipulation and self-harm risk, and a suggested reply. By default everything runs on-device; you can opt into cloud models (OpenAI-compatible services such as OpenAI, DeepSeek, Qwen, OpenRouter, or Anthropic Claude via the native Messages API with structured outputs), in which case the message, recent context and that contact's memory summary are sent to that provider. EmoLens also keeps a local per-contact memory (notes you confirm, emotion trends, per-contact relationship) that is fed back into the analysis. It never touches the WeChat protocol.
+**English summary.** EmoLens is an open-source macOS floating-panel app that watches the window of an instant-messaging app via ScreenCaptureKit, OCRs new messages locally with Apple Vision, and analyzes the other person's latest message with a local model (Ollama, optionally cross-checked by a System One decision model: local Kev or TypeSafe's hosted Jev): emotion, subtext (sarcasm / coy / unsaid), relationship signals including manipulation and self-harm risk, and a suggested reply. By default everything runs on-device; you can opt into cloud models (OpenAI-compatible services such as OpenAI, DeepSeek, Qwen, OpenRouter, or Anthropic Claude via the native Messages API with structured outputs), in which case the message, recent context and that contact's memory summary are sent to that provider. EmoLens also keeps a local per-contact memory (notes you confirm, emotion trends, per-contact relationship) that is fed back into the analysis. It never hooks into any messaging app's protocol; it only reads the screen.

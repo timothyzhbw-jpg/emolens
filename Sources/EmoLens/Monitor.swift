@@ -16,8 +16,8 @@ final class Monitor: ObservableObject {
         var text: String {
             switch self {
             case .paused: "已暂停"
-            case .watching: "正在看微信"
-            case .noWindow(let chosen): chosen ? "选定的窗口不见了，请在设置里重新选" : "没找到微信窗口，请先打开微信"
+            case .watching: "正在看聊天窗口"
+            case .noWindow(let chosen): chosen ? "选定的窗口不见了，请在设置里重新选" : "没找到聊天窗口：先打开聊天软件，或在设置里选一个窗口"
             case .windowHidden(let name): "\(name) 被最小化了，点程序坞把它恢复"
             case .needsPermission: "需要屏幕录制权限"
             case .failed(let message): message
@@ -184,7 +184,7 @@ final class Monitor: ObservableObject {
 
     /// 预览渲染用：直接设定界面状态，不截图也不分析。
     func loadPreview(status: Status, reports: [EmotionReport], analyzing: Bool = false,
-                     windowName: String = "微信", error: String? = nil, preview: CGImage? = nil, pendingVoice: Int? = nil) {
+                     windowName: String = "聊天窗口", error: String? = nil, preview: CGImage? = nil, pendingVoice: Int? = nil) {
         self.pendingVoice = pendingVoice
         self.status = status
         self.reports = reports

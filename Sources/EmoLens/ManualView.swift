@@ -23,7 +23,7 @@ struct ManualView: View {
             }
             editor
             if transcript.isEmpty {
-                Text("在微信里选中几条消息复制，粘贴到这里。支持「小美：内容」和「小美 12:30」换行两种格式；认不出名字的行会算作对方说的。")
+                Text("在聊天软件里选中几条消息复制，粘贴到这里。支持「小美：内容」和「小美 12:30」换行两种格式；认不出名字的行会算作对方说的。")
                     .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             } else if latest == nil {
                 Text("没找到对方发的消息。如果整段都是你自己说的，就没什么可分析的。")
@@ -86,7 +86,7 @@ struct ModeSwitch: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            tab("实时看微信", symbol: "eye", selected: !manual) {
+            tab("实时看聊天", symbol: "eye", selected: !manual) {
                 manual = false
                 monitor.start()
             }

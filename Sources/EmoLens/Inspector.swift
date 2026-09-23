@@ -79,7 +79,7 @@ enum Inspector {
         guard let index = described.lastIndex(where: { $0.speaker == .them }) else { return }
         let latest = described[index]
         if latest.attachment?.isUntranscribedVoice == true {
-            print("\n对方最后一条是没转文字的语音，应用里会提示用户先在微信里转文字。")
+            print("\n对方最后一条是没转文字的语音，应用里会提示用户先在聊天软件里转文字。")
             return
         }
         let context = Array(described[..<index].filter { $0.speaker != .system }.suffix(10))

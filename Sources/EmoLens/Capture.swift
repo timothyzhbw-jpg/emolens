@@ -5,7 +5,14 @@ import Vision
 
 /// 找窗口、截窗口、裁出聊天区域。截的是单个窗口本身，被别的窗口挡住也没关系。
 enum WindowCapture {
-    static let weChatBundleID = "com.tencent.xinWeChat"
+    /// 「自动」模式认得的聊天软件，按优先级排。都是「对方靠左、我靠右」的界面；
+    /// Slack、Discord 这类所有人都靠左的不放进来（分不清谁是谁），想用可以在设置里手动选窗口。
+    static let chatApps = [
+        "com.tencent.xinWeChat", "com.tencent.qq", "com.tencent.WeWorkMac",   // 微信、QQ、企业微信
+        "com.alibaba.DingTalkMac", "com.bytedance.macos.feishu",              // 钉钉、飞书
+        "ru.keepcoder.Telegram", "org.telegram.desktop", "net.whatsapp.WhatsApp",
+        "jp.naver.line.mac", "org.whispersystems.signal-desktop", "com.apple.MobileSMS",
+    ]
 
     static func windows() async throws -> [SCWindow] {
         let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false)
@@ -31,11 +38,16 @@ enum WindowCapture {
             let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false)
             return content.windows.first { $0.windowID == id }.map { .hidden(name(of: $0)) } ?? .missing
         }
-        let weChat = all.filter { $0.owningApplication?.bundleIdentifier == weChatBundleID }
-        if let window = weChat.filter(\.isOnScreen).max(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }) {
-            return .found(window)
+        // 按优先级找第一个有窗口在屏幕上的聊天软件，取它最大的窗口
+        var hidden: SCWindow?
+        for app in chatApps {
+            let windows = all.filter { $0.owningApplication?.bundleIdentifier == app }
+            if let window = windows.filter(\.isOnScreen).max(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }) {
+                return .found(window)
+            }
+            hidden = hidden ?? windows.first
         }
-        return weChat.isEmpty ? .missing : .hidden("微信")
+        return hidden.map { .hidden($0.owningApplication?.applicationName ?? "聊天软件") } ?? .missing
     }
 
     static func name(of window: SCWindow) -> String {

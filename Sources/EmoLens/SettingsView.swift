@@ -28,7 +28,7 @@ struct SettingsView: View {
                 Section("要看的窗口") {
                     HStack {
                         Picker("窗口", selection: $settings.windowID) {
-                            Text("自动：最大的微信窗口").tag(CGWindowID(0))
+                            Text("自动：正在开着的聊天软件").tag(CGWindowID(0))
                             ForEach(windows) { option in
                                 Text(option.name).tag(option.id)
                             }
@@ -327,7 +327,7 @@ struct RegionPicker: View {
         } else {
             VStack(spacing: 6) {
                 Image(systemName: "rectangle.dashed").font(.system(size: 22)).foregroundStyle(.tertiary)
-                Text("还没有截图：确认微信开着，并已允许屏幕录制权限").font(.system(size: 11.5)).foregroundStyle(.secondary)
+                Text("还没有截图：确认聊天软件开着，并已允许屏幕录制权限").font(.system(size: 11.5)).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, minHeight: 140)
         }
