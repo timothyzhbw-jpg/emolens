@@ -26,11 +26,31 @@ EmoLens 是一个开源的 macOS 桌面小工具：像共享屏幕一样实时�
 
 ## 快速开始
 
-需要：macOS 14+（推荐 Apple Silicon）、Xcode 或 Command Line Tools（Swift 5.10+）、[Ollama](https://ollama.com)。
+需要：macOS 14 及以上；本地分析需要 [Ollama](https://ollama.com)（只用云端模型可以不装）。
+
+### 下载安装（推荐）
+
+1. 到 [Releases](https://github.com/timothyzhbw-jpg/emolens/releases/latest) 下载 `EmoLens-x.y.z.dmg`，打开后把 **EmoLens** 拖进「应用程序」。安装包同时包含 Apple 芯片和 Intel 版本（Intel 版还没在真机上测过，遇到问题欢迎提 issue）。
+2. 下载本地分析模型（约 3.4 GB）。不用手动 `ollama serve`，EmoLens 会自己启动：
+
+   ```bash
+   ollama pull qwen3.5:4b
+   ```
+
+3. **第一次打开会被 macOS 拦下**：EmoLens 是个人开源项目，没有付费的 Apple 开发者签名和公证，系统会提示「无法验证开发者」。点「完成」，然后到「系统设置 → 隐私与安全性」，在页面下方点「仍要打开」。也可以在终端里执行一次：
+
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/EmoLens.app
+   ```
+
+   不放心的话，可以按下面的步骤自己从源码构建。
+
+### 从源码构建
+
+另外需要 Xcode 或 Command Line Tools（Swift 5.10+）。
 
 ```bash
-ollama pull qwen3.5:4b          # 默认的本地分析模型，约 3.4 GB（只用云端模型可以跳过）
-                                # 不用手动 ollama serve，EmoLens 会自己启动
+ollama pull qwen3.5:4b          # 默认的本地分析模型（只用云端模型可以跳过）
 git clone https://github.com/timothyzhbw-jpg/emolens.git && cd emolens
 ./scripts/build_app.sh          # 生成 build/EmoLens.app
 open build/EmoLens.app
@@ -38,9 +58,11 @@ open build/EmoLens.app
 
 **建议先做一次（约 1 分钟）：创建本地签名证书。** 打开「钥匙串访问 → 证书助理 → 创建证书…」，名称填 `EmoLens Local`，身份类型「自签名根证书」，证书类型「代码签名」。`build_app.sh` 检测到它就会用它签名。没有它时只能用 ad-hoc 签名，**每次重新构建，macOS 都会把应用当成新的，要求重新授予屏幕录制权限**（系统设置里的开关可能仍显示为打开，但已经不生效，需要先用「−」删掉旧条目）。
 
+### 用起来
+
 打开后面板会浮在最上层，切换桌面空间、或别的应用全屏时都会跟着走；菜单栏也有一个眼睛图标，可以随时把面板叫回来或暂停监控。
 
-用本地模型时不用先开终端：**EmoLens 会自己启动 Ollama**（只对本机地址生效，可在设置里关闭）。本地起不来时会如实报错并告诉你怎么办，**绝不会自动改用云端模型**——聊天内容要不要发出去只能由你决定。
+用本地模型时不用先开终端：**EmoLens 会自己启动 Ollama**（只对本机地址生效，可在设置里关闭），并在后台先把模型加载好，所以第一条消息也不用等冷启动（开发用的 Apple 芯片 Mac 上实测：约 4 秒，冷启动要 11.7 秒）。本地起不来时会如实报错并告诉你怎么办，**绝不会自动改用云端模型**——聊天内容要不要发出去只能由你决定。
 
 第一次打开时：
 
@@ -164,6 +186,7 @@ swift run EmoLens --eval 你的测试集.jsonl 结果.jsonl   # 每行 {"text": 
 swift build          # 编译
 swift test           # 单元测试（聊天气泡解析、新消息检测、引擎解析与请求格式、安全网）
 swift run EmoLens    # 直接运行（屏幕录制权限会记在终端名下）
+./scripts/make_dmg.sh   # 打包发布用的 DMG（Apple 芯片 + Intel 通用版）
 ```
 
 ```

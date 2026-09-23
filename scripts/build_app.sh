@@ -1,15 +1,23 @@
 #!/bin/bash
-# 构建 EmoLens.app：release 编译 → 组装 .app → ad-hoc 签名。产物在 build/EmoLens.app。
+# 构建 EmoLens.app：release 编译 → 组装 .app → 签名。产物在 build/EmoLens.app。
+# 默认只编本机架构；UNIVERSAL=1 时同时编 Apple 芯片和 Intel（发布用，见 make_dmg.sh）。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION="0.2.0"
+VERSION="0.3.0"
+BUILD="3"
 APP="build/EmoLens.app"
 
-swift build -c release
+if [ "${UNIVERSAL:-0}" = 1 ]; then
+    swift build -c release --arch arm64 --arch x86_64
+    BIN=".build/apple/Products/Release"
+else
+    swift build -c release
+    BIN=".build/release"
+fi
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp .build/release/EmoLens "$APP/Contents/MacOS/EmoLens"
+cp "$BIN/EmoLens" "$APP/Contents/MacOS/EmoLens"
 cp -R presets "$APP/Contents/Resources/presets"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
@@ -23,7 +31,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleExecutable</key><string>EmoLens</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>${VERSION}</string>
-    <key>CFBundleVersion</key><string>1</string>
+    <key>CFBundleVersion</key><string>${BUILD}</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
     <key>NSHighResolutionCapable</key><true/>
