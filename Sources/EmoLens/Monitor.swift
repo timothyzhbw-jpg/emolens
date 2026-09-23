@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import EmoLensCore
 import Foundation
@@ -52,12 +53,35 @@ final class Monitor: ObservableObject {
     private var analyzedKeys: [String] = []
     private var ollamaChecked = false
     private var ollamaRetried = false
+    private var warmedUp = false
+    /// 找到的窗口先缓存 10 秒：列举全部窗口比截一张图还贵，没必要每 1.5 秒做一次。
+    private var cachedWindow: SCWindow?
+    private var cachedAt = Date.distantPast
+    /// 屏幕睡眠、锁屏或切换用户时暂停截屏。
+    private var suspended = false
+    private var observers: [NSObjectProtocol] = []
     /// 被监控窗口自己的应用名和标题（识别联系人时排除）。
     private var windowTitles: [String] = []
 
     init(settings: AppSettings, memory: ContactMemoryStore = ContactMemoryStore()) {
         self.settings = settings
         self.memory = memory
+        let center = NSWorkspace.shared.notificationCenter
+        for (name, value) in [(NSWorkspace.screensDidSleepNotification, true), (NSWorkspace.sessionDidResignActiveNotification, true),
+                              (NSWorkspace.screensDidWakeNotification, false), (NSWorkspace.sessionDidBecomeActiveNotification, false)] {
+            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.suspended = value }
+            })
+        }
+    }
+
+    /// 下一次截屏前等多久：找不到窗口、没权限、屏幕睡着时放慢，省电。
+    private var nextDelay: Double {
+        let base = max(0.5, settings.interval)
+        switch status {
+        case .watching: return suspended ? 5 : base
+        default: return max(base, 4)
+        }
     }
 
     var currentContact: String? { manualContact ?? detectedContact }
@@ -130,8 +154,8 @@ final class Monitor: ObservableObject {
         loop = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
-                await self.tick()
-                try? await Task.sleep(for: .seconds(max(0.5, self.settings.interval)))
+                if !self.suspended { await self.tick() }
+                try? await Task.sleep(for: .seconds(self.nextDelay))
             }
         }
     }
@@ -146,6 +170,7 @@ final class Monitor: ObservableObject {
     func restart() {
         tracker = MessageTracker()
         signature = nil
+        cachedWindow = nil
         if isRunning { pause(); start() }
     }
 
@@ -171,21 +196,34 @@ final class Monitor: ObservableObject {
     private func tick() async {
         do {
             let window: SCWindow
-            switch try await WindowCapture.find(id: settings.windowID) {
-            case .found(let found): window = found
-            case .hidden(let name):
-                if status != .windowHidden(name) { log.notice("window hidden: \(name, privacy: .private)") }
-                status = .windowHidden(name)
-                return
-            case .missing:
-                let next = Status.noWindow(chosen: settings.windowID != 0)
-                if status != next { log.notice("window missing, id=\(self.settings.windowID)") }
-                status = next
-                return
+            if let cached = cachedWindow, Date().timeIntervalSince(cachedAt) < 10 {
+                window = cached
+            } else {
+                switch try await WindowCapture.find(id: settings.windowID) {
+                case .found(let found):
+                    window = found
+                    cachedWindow = found
+                    cachedAt = Date()
+                case .hidden(let name):
+                    if status != .windowHidden(name) { log.notice("window hidden: \(name, privacy: .private)") }
+                    status = .windowHidden(name)
+                    return
+                case .missing:
+                    let next = Status.noWindow(chosen: settings.windowID != 0)
+                    if status != next { log.notice("window missing, id=\(self.settings.windowID)") }
+                    status = next
+                    return
+                }
+                windowName = WindowCapture.name(of: window)
+                windowTitles = [window.owningApplication?.applicationName, window.title].compactMap { $0 }
             }
-            windowName = WindowCapture.name(of: window)
-            windowTitles = [window.owningApplication?.applicationName, window.title].compactMap { $0 }
-            let frame = try await WindowCapture.capture(window)
+            let frame: CGImage
+            do {
+                frame = try await WindowCapture.capture(window)
+            } catch {
+                cachedWindow = nil   // 窗口可能被关掉或最小化了，下一轮重新找
+                throw error
+            }
             preview = frame
             status = .watching
             guard let chat = WindowCapture.crop(frame, to: settings.region),
@@ -270,6 +308,21 @@ final class Monitor: ObservableObject {
         analysisError = nil
         pending = (context, latest, manualContact ?? latest.sender)
         if !analyzing { Task { await drain() } }
+    }
+
+    /// 启动时把本地模型和提示词前缀预先加载好：冷启动第一次分析要 11.7 秒，预热后约 3 秒。
+    /// 只对本地模型做——云端模型按次计费，绝不偷偷调用。
+    func warmUpLocalModel() {
+        guard !warmedUp, settings.llmProvider == .ollama, settings.engine != .systemOne else { return }
+        warmedUp = true
+        Task {
+            await ensureLocalModel()
+            guard let url = URL(string: settings.ollamaURL), await OllamaLauncher.ping(url),
+                  let analyzer = try? settings.analyzerConfig().makeAnalyzer(engine: .llm, relationship: settings.relationship) else { return }
+            let start = Date()
+            _ = try? await analyzer.analyze(context: [], latest: ChatMessage(speaker: .them, text: "嗯", top: 0))
+            log.notice("warm-up done in \(Int(Date().timeIntervalSince(start) * 1000)) ms")
+        }
     }
 
     /// 一次只分析一条；分析期间来的新消息只保留最新的一条。

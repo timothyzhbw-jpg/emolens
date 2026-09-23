@@ -28,6 +28,7 @@ public struct OllamaBackend: ChatBackend {
     public var model: String
     public var name: String { "本地大模型 · \(model)" }
     public var cloudProvider: String? { nil }
+    public static let keepAlive = "30m"
 
     public init(baseURL: URL = URL(string: "http://127.0.0.1:11434")!, model: String = "qwen3.5:4b") {
         self.baseURL = baseURL
@@ -38,6 +39,8 @@ public struct OllamaBackend: ChatBackend {
         // qwen3.5 在 Ollama 里对 JSON Schema 约束不稳定，用通用的 json 模式，解析时再兜底修复。
         let body: [String: Any] = [
             "model": model, "stream": false, "think": false, "format": "json",
+            // Ollama 默认闲置 5 分钟就卸载模型，下次要多等 8 秒以上；聊天常常隔一阵才来一条，留 30 分钟。
+            "keep_alive": OllamaBackend.keepAlive,
             "options": ["temperature": 0.2],
             "messages": [["role": "system", "content": system]] + turns.map { ["role": $0.role, "content": $0.content] },
         ]

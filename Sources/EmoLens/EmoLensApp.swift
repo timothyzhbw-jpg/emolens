@@ -74,7 +74,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self.panel = panel
         setUpStatusItem()
         showPanel()
-        monitor.start()
+        if !settings.manualMode { monitor.start() }
+        monitor.warmUpLocalModel()
     }
 
     /// 把面板显示出来并置前。被隐藏过（⌘H）也能恢复，所以不会出现「应用在跑但看不到窗口」。
