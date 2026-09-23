@@ -1,0 +1,48 @@
+# 在 issue 或 PR 的评论里写 @claude，Claude 就会在 GitHub 的 macOS 机器上改代码、跑测试、开 PR。
+# 只有对仓库有写权限的人能触发。
+#
+# 第一次使用前（只需一次）：
+#   1. 安装 Claude GitHub App 到这个仓库：https://github.com/apps/claude
+#   2. 在本机运行 `claude setup-token`，用 Claude 订阅生成一个长期 token，
+#      再运行 `gh secret set CLAUDE_CODE_OAUTH_TOKEN`，把 token 粘贴进去（存成仓库的 secret，不要提交进代码）。
+name: Claude
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  claude:
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+    # macOS：这样 Claude 能自己编译、跑测试（Linux 上编译不了这个项目）
+    runs-on: macos-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read # 让 Claude 能看 PR 上的 CI 结果
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: |
+            --max-turns 40
+            --allowedTools "Bash(swift build:*),Bash(swift test:*),Bash(swift run EmoLens --inspect:*)"

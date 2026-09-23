@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # EmoLens 是 Mac 应用（ScreenCaptureKit、SwiftUI、Vision），只能在 macOS 上编译。
+    # 云端会话跑在 Linux 上编译不了，改完推上来靠这里验证。公开仓库的 macOS 机器免费。
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - name: Swift 版本
+        run: swift --version
+      - name: 编译（应用、演示窗口、核心库）
+        run: swift build
+      - name: 单元测试
+        run: swift test
