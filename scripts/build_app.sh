@@ -4,8 +4,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION="0.4.0"
-BUILD="4"
+VERSION="0.5.0"
+BUILD="5"
 APP="build/EmoLens.app"
 
 if [ "${UNIVERSAL:-0}" = 1 ]; then

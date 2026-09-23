@@ -20,17 +20,18 @@ public struct SystemOnePreset: @unchecked Sendable {
     }
 }
 
-/// 调用兼容 TypeSafe System One API 的决策模型服务（Kev、Jev 等），返回校准过的概率。
+/// 调用兼容 TypeSafe System One API 的决策模型服务，返回校准过的概率：
+/// 本机的 Kev（不需要密钥），或 TypeSafe 云端的 Jev（Authorization: Bearer 密钥）。两者请求和返回的格式相同。
 public struct SystemOneAnalyzer: EmotionAnalyzer {
-    public var name: String { "决策模型" }
-    public var baseURL: URL
+    public var source: SystemOneSource
     public var preset: SystemOnePreset
     public var relationship: String?
     public var memory: String?
+    public var name: String { source.name }
 
-    public init(baseURL: URL = URL(string: "http://127.0.0.1:8009")!, preset: SystemOnePreset,
+    public init(source: SystemOneSource = .localKev, preset: SystemOnePreset,
                 relationship: String? = nil, memory: String? = nil) {
-        self.baseURL = baseURL
+        self.source = source
         self.preset = preset
         self.relationship = relationship
         self.memory = memory
@@ -39,11 +40,15 @@ public struct SystemOneAnalyzer: EmotionAnalyzer {
     public func analyze(context: [ChatMessage], latest: ChatMessage) async throws -> EmotionReport {
         let body: [String: Any] = [
             "state": ChatState.render(context: context, latest: latest, relationship: relationship, memory: memory),
-            "model": "kev-latest",
+            "model": source.model,
             "questions": preset.questions,
         ]
+        var headers: [String: String] = [:]
+        if let key = source.apiKey { headers["Authorization"] = "Bearer \(key)" }
         let start = Date()
-        let response = try await HTTP.post(baseURL.appending(path: "v1/systemone"), body: body, service: "决策模型", timeout: 300)
+        // 本机 Kev 第一次请求要加载模型，可能要几分钟；云端 Jev 一般一秒内
+        let response = try await HTTP.post(source.baseURL.appending(path: "v1/systemone"), body: body, headers: headers,
+                                           service: source.serviceName, timeout: source.apiKey == nil ? 300 : 30)
         let latency = Date().timeIntervalSince(start) * 1000
         guard let answers = response["answers"] as? [String: [String: Any]] else {
             throw AnalyzerError.badResponse("缺少 answers")

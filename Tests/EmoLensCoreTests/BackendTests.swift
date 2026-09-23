@@ -60,6 +60,65 @@ final class BackendTests: XCTestCase {
     private var sent: [String: Any] { (try? JSONSerialization.jsonObject(with: MockURLProtocol.lastBody) as? [String: Any]) ?? [:] }
     private func header(_ name: String) -> String? { MockURLProtocol.lastRequest?.value(forHTTPHeaderField: name) }
 
+    // MARK: 决策模型：本机 Kev / 云端 Jev
+
+    private let decisionAnswer = #"{"model": "jev-latest", "answers": {"emotion": {"type": "choice", "choice": "angry", "probabilities": {"angry": 0.8}}, "self_harm": {"type": "noul", "noul": 0.02}, "intensity": {"type": "score", "score": 2.1}}}"#
+    private var decisionPreset: SystemOnePreset {
+        SystemOnePreset(questions: ["emotion": ["type": "choice", "instructions": "情绪", "criteria": ["angry": "生气：…"]],
+                                    "self_harm": ["type": "noul", "instructions": "自伤"]])
+    }
+
+    func testJevSendsBearerKeyAndModel() async throws {
+        respond(decisionAnswer)
+        let source = SystemOneSource.jev(baseURL: SystemOneSource.jevURL, model: "jev-latest", apiKey: "ts-test")
+        let report = try await SystemOneAnalyzer(source: source, preset: decisionPreset)
+            .analyze(context: [], latest: ChatMessage(speaker: .them, text: "你到底想怎样", top: 0))
+        XCTAssertEqual(MockURLProtocol.lastRequest?.url?.absoluteString, "https://api.typesafe.ai/v1/systemone")
+        XCTAssertEqual(header("Authorization"), "Bearer ts-test")
+        XCTAssertEqual(sent["model"] as? String, "jev-latest")
+        XCTAssertNotNil(sent["questions"] as? [String: Any])
+        XCTAssertEqual(report.emotion, "生气")
+        XCTAssertEqual(report.intensity, 2.1)
+        XCTAssertEqual(report.engine, "决策模型 · Jev（jev-latest）")
+        XCTAssertEqual(source.cloudProvider, "TypeSafe（Jev）")
+    }
+
+    func testKevSendsNoKey() async throws {
+        respond(decisionAnswer)
+        _ = try await SystemOneAnalyzer(source: .localKev, preset: decisionPreset)
+            .analyze(context: [], latest: ChatMessage(speaker: .them, text: "嗯", top: 0))
+        XCTAssertEqual(MockURLProtocol.lastRequest?.url?.absoluteString, "http://127.0.0.1:8009/v1/systemone")
+        XCTAssertNil(header("Authorization"), "本机 Kev 不需要密钥，也不该收到别的服务的密钥")
+        XCTAssertEqual(sent["model"] as? String, "kev-latest")
+        XCTAssertNil(SystemOneSource.localKev.cloudProvider)
+    }
+
+    func testJevErrorMessageIsReadable() async {
+        respond(#"{"error": "Invalid API key"}"#, status: 401)
+        let source = SystemOneSource.jev(baseURL: SystemOneSource.jevURL, model: "jev-latest", apiKey: "wrong")
+        do {
+            _ = try await SystemOneAnalyzer(source: source, preset: decisionPreset)
+                .analyze(context: [], latest: ChatMessage(speaker: .them, text: "嗯", top: 0))
+            XCTFail("401 应当报错")
+        } catch AnalyzerError.http(let service, let status, let detail) {
+            XCTAssertEqual(service, "Jev（TypeSafe）")
+            XCTAssertEqual(status, 401)
+            XCTAssertEqual(detail, "Invalid API key")
+        } catch {
+            XCTFail("\(error)")
+        }
+    }
+
+    func testCombinedEngineUsesJevAsChecker() throws {
+        var config = AnalyzerConfig()
+        config.engine = .combined
+        config.systemOne = .jev(baseURL: SystemOneSource.jevURL, model: "jev-latest", apiKey: "k")
+        config.presets = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../../presets").standardized
+        let analyzer = try XCTUnwrap(config.makeAnalyzer() as? CombinedAnalyzer)
+        XCTAssertEqual((analyzer.checker as? SystemOneAnalyzer)?.source.apiKey, "k")
+        XCTAssertEqual(analyzer.name, "本地大模型 · qwen3.5:4b + 决策模型 · Jev（jev-latest）")
+    }
+
     // MARK: 图片（看表情、表情包）
 
     private let imageTurn = [ChatTurn(role: "user", content: "这是什么表情", images: [Data([0x89, 0x50])])]

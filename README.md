@@ -135,13 +135,24 @@ EmoLens 会读聊天窗口顶部的名字，认出正在和谁聊（认错了可
 - API Key 只保存在 macOS 钥匙串里，不写进配置文件，也不会出现在日志里。
 - 云端按量计费：每分析一条消息都是一次请求（系统提示 + 示例约几千 token，会自动缓存）。价格以各服务商官网为准。
 
+### 决策模型从哪来
+
+「决策模型」（System One）不生成文字，直接对每个问题给出校准过的概率。EmoLens 支持两种，接口相同，在 设置 → 分析引擎 → 决策模型来源 里切换：
+
+| 来源 | 说明 |
+|---|---|
+| **本机 Kev** | [Kev](https://github.com/jaredpalmer/kev) 是开源的 Jev 仿制模型，在本机运行，免费、不联网；约占 10 GB 内存，Mac 上每条约 0.5 秒 |
+| **Jev（TypeSafe 云端）** | [TypeSafe](https://docs.typesafe.ai/api) 的闭源决策模型，填 API Key 就能用，不占本机资源，按量计费（很便宜）。Jev 没有公开的中文评测，EmoLens 也还没在中文评测集上测过它 |
+
+大模型和决策模型可以任意搭配，比如「Claude + Jev」双引擎：全在云端，本机什么都不用跑。用到云端服务时，面板底部会一直列出消息会发给谁。
+
 ### 三种引擎
 
 | 引擎 | 强项 | 弱项 | 占用 |
 |---|---|---|---|
 | **大模型**（默认） | 能读中文潜台词（反话、敷衍、撒娇、报喜不报忧），会写回复建议 | 本地 4B 小模型不够稳定，严重信号偶尔漏判；换成云端大模型会好很多 | 本地约 5 GB 内存、每条 3–5 秒；云端几乎不占本机资源 |
-| **双引擎**（大模型 + [Kev](https://github.com/jaredpalmer/kev) 复核） | 大模型负责潜台词和回复；Kev 并行复核「生我的气 / 冷战 / 操控 / 自伤」，两者取较高值 | 需要同时运行 Kev 服务 | 再多约 10 GB 内存 |
-| **决策模型**（Kev，System One API） | 输出校准过的概率，严重信号稳定 | 读不懂中文潜台词（反话、敷衍几乎全漏），没有回复建议，Mac 上较慢 | 约 10 GB 内存 |
+| **双引擎**（大模型 + 决策模型复核） | 大模型负责潜台词和回复；决策模型并行复核「生我的气 / 冷战 / 操控 / 自伤 / 涉及钱」，两者取较高值 | 用 Kev 要同时运行 Kev 服务；用 Jev 要 API Key | Kev 再多约 10 GB 内存；Jev 不占 |
+| **决策模型**（Kev 或 Jev） | 输出校准过的概率，严重信号稳定 | 读不懂中文潜台词（Kev 实测反话、敷衍几乎全漏），没有回复建议 | Kev 约 10 GB 内存；Jev 不占 |
 
 此外有两道**关键词安全网**，不依赖模型，任何引擎下都生效：
 
@@ -150,7 +161,7 @@ EmoLens 会读聊天窗口顶部的名字，认出正在和谁聊（认错了可
 
 「情感操控」会误判（「反正我也不重要」这种委屈也常被判成），所以提示语写成对误判无害的说法；如果联系人记忆显示最近 14 天反复出现，才会明确提醒。
 
-任何兼容 [TypeSafe System One API](https://docs.typesafe.ai/api) 的服务都可以作为决策模型引擎。Kev 的启动方式见它的仓库；在 24 GB 内存的 Mac 上建议加 `KEV_MERGE=0`：
+任何兼容 [TypeSafe System One API](https://docs.typesafe.ai/api) 的服务都可以作为决策模型引擎（选「Jev」，把接口地址改成你的服务）。Kev 的启动方式见它的仓库；在 24 GB 内存的 Mac 上建议加 `KEV_MERGE=0`：
 
 ```bash
 KEV_DTYPE=bf16 KEV_MERGE=0 uv run --extra serve python -m kev.serve --run jaredpalmer/kev-4b --port 8009
@@ -170,6 +181,9 @@ KEV_DTYPE=bf16 KEV_MERGE=0 uv run --extra serve python -m kev.serve --run jaredp
 
 ```bash
 swift run EmoLens --eval 你的测试集.jsonl 结果.jsonl   # 每行 {"text": "...", "relationship": "恋人"}
+# 换成决策模型评测（变量名和 TypeSafe 官方 SDK 一致）：
+EMOLENS_ENGINE=systemOne TYPESAFE_API_KEY=你的key swift run EmoLens --eval 测试集.jsonl jev结果.jsonl
+EMOLENS_ENGINE=systemOne EMOLENS_KEV_URL=http://127.0.0.1:8009 swift run EmoLens --eval 测试集.jsonl kev结果.jsonl
 ```
 
 ## 自定义

@@ -447,8 +447,9 @@ final class Monitor: ObservableObject {
     /// 把常见的网络错误翻成用户看得懂、知道怎么办的话。
     private func describe(_ error: Error) -> String {
         let engine = settings.engine
-        let fix = engine == .systemOne ? "请确认 Kev 服务在运行。"
-            : engine == .combined ? "请确认 Ollama（ollama serve）和 Kev 都在运行。" : "请先在终端运行 ollama serve。"
+        let decision = settings.systemOneProvider == .jev ? "Jev 的 API Key 和网络" : "Kev 服务在运行"
+        let fix = engine == .systemOne ? "请确认\(decision)。"
+            : engine == .combined ? "请确认 Ollama（ollama serve）在运行，以及\(decision)。" : "请先在终端运行 ollama serve。"
         switch (error as? URLError)?.code {
         case .cannotConnectToHost?, .cannotFindHost?, .networkConnectionLost?, .notConnectedToInternet?:
             return "连不上分析引擎（\(engine.name)）。" + fix

@@ -25,6 +25,51 @@ public enum LLMSource: Sendable {
     }
 }
 
+/// 决策模型（System One）从哪来：本机的 Kev，或 TypeSafe 云端的 Jev。接口相同，只是 Jev 要密钥、按量计费。
+public enum SystemOneSource: Sendable, Equatable {
+    case kev(baseURL: URL)
+    case jev(baseURL: URL, model: String, apiKey: String)
+
+    public static let localKev = SystemOneSource.kev(baseURL: URL(string: "http://127.0.0.1:8009")!)
+    public static let jevURL = URL(string: "https://api.typesafe.ai")!
+    public static let jevModel = "jev-latest"
+
+    public var baseURL: URL {
+        switch self {
+        case .kev(let url), .jev(let url, _, _): url
+        }
+    }
+
+    public var model: String {
+        switch self {
+        case .kev: "kev-latest"
+        case .jev(_, let model, _): model
+        }
+    }
+
+    public var apiKey: String? {
+        if case .jev(_, _, let key) = self { key } else { nil }
+    }
+
+    /// 界面和结果里显示的名字。
+    public var name: String {
+        switch self {
+        case .kev: "决策模型 · Kev"
+        case .jev(_, let model, _): "决策模型 · Jev（\(model)）"
+        }
+    }
+
+    /// 出错时说是哪个服务。
+    var serviceName: String {
+        if case .jev = self { "Jev（TypeSafe）" } else { "Kev" }
+    }
+
+    /// 云端服务名；本机 Kev 为 nil。
+    public var cloudProvider: String? {
+        if case .jev = self { "TypeSafe（Jev）" } else { nil }
+    }
+}
+
 /// OpenAI 兼容服务的预设：选一个就自动填好地址和常用模型（模型名可以改）。
 public struct OpenAIPreset: Sendable, Identifiable, Equatable {
     public let id: String
@@ -48,7 +93,7 @@ public struct OpenAIPreset: Sendable, Identifiable, Equatable {
 public struct AnalyzerConfig: Sendable {
     public var engine: Engine = .llm
     public var llm: LLMSource = .localDefault
-    public var systemOneURL = URL(string: "http://127.0.0.1:8009")!
+    public var systemOne: SystemOneSource = .localKev
     public var presets: URL = Presets.directory
 
     public init() {}
@@ -74,7 +119,7 @@ public struct AnalyzerConfig: Sendable {
     private func systemOne(_ relationship: String?, _ memory: String?, only ids: [String]? = nil) throws -> SystemOneAnalyzer {
         var preset = try SystemOnePreset.load(from: presets.appending(path: "emotion.zh.json"))
         if let ids { preset = preset.subset(ids) }
-        return SystemOneAnalyzer(baseURL: systemOneURL, preset: preset, relationship: relationship, memory: memory)
+        return SystemOneAnalyzer(source: systemOne, preset: preset, relationship: relationship, memory: memory)
     }
 }
 

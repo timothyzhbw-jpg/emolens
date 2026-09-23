@@ -62,7 +62,7 @@ enum Inspector {
     }
 
     static func analysis(_ messages: [ChatMessage], image: CGImage) async {
-        let config = AnalyzerConfig()
+        let config = EvalRunner.config()
         let describer = VisualDescriber(backend: config.llm.backend())
         var described = messages
         print("\n看图：")

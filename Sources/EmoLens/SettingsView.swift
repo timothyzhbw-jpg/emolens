@@ -70,7 +70,11 @@ struct SettingsView: View {
                         providerFields
                     }
                     if settings.engine != .llm {
-                        TextField("Kev（System One）地址", text: $settings.systemOneURL)
+                        Picker("决策模型来源", selection: $settings.systemOneProvider) {
+                            ForEach(SystemOneProvider.allCases) { Text($0.name).tag($0) }
+                        }
+                        .onChange(of: settings.systemOneProvider) { check = .idle }
+                        systemOneFields
                     }
                     HStack {
                         Button("测试连接") { Task { await testConnection() } }
@@ -125,7 +129,8 @@ struct SettingsView: View {
             .formStyle(.grouped)
 
             HStack {
-                Text("所有处理都在本机完成").font(.system(size: 11)).foregroundStyle(.tertiary)
+                Text(settings.cloudProviderName.map { "会发送给：\($0)" } ?? "所有处理都在本机完成")
+                    .font(.system(size: 11)).foregroundStyle(settings.cloudProviderName == nil ? Color.secondary : Color.orange)
                 Spacer()
                 Button("完成") { monitor.restart(); dismiss() }
                     .keyboardShortcut(.defaultAction)
@@ -163,9 +168,25 @@ struct SettingsView: View {
     }
 
     private var cloudNote: some View {
-        Label("云端模式：对方的消息和最近约 10 条聊天（以及对方发的表情截图）会发送给 \(settings.cloudProviderName ?? "云端服务") 分析。API Key 只保存在本机钥匙串里。",
+        Label("云端模式：对方的消息和最近约 10 条聊天（以及对方发的表情截图）会发送给 \(settings.llmCloudName ?? "云端服务") 分析。API Key 只保存在本机钥匙串里。",
               systemImage: "icloud.and.arrow.up")
             .font(.system(size: 11)).foregroundStyle(.orange)
+    }
+
+    @ViewBuilder private var systemOneFields: some View {
+        switch settings.systemOneProvider {
+        case .kev:
+            TextField("Kev 地址", text: $settings.systemOneURL)
+            Text("本机运行，不联网、不花钱；约占 10 GB 内存。启动方法见 README。")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+        case .jev:
+            SecureField("API Key", text: $settings.jevKey)
+            TextField("模型", text: $settings.jevModel, prompt: Text(SystemOneSource.jevModel))
+            TextField("接口地址", text: $settings.jevURL)
+            Label("Jev 是 TypeSafe 的云端决策模型：对方的消息和最近约 10 条聊天会发送给 TypeSafe 分析，按量计费（很便宜）。它没有公开的中文评测。API Key 只保存在本机钥匙串里。",
+                  systemImage: "icloud.and.arrow.up")
+                .font(.system(size: 11)).foregroundStyle(.orange)
+        }
     }
 
     @ViewBuilder private var checkLabel: some View {
@@ -199,7 +220,7 @@ struct SettingsView: View {
                 case .openai:
                     _ = try await get(settings.openAIBaseURL, path: "models",
                                       headers: ["Authorization": "Bearer \(settings.openAIKey)"])
-                    results.append("\(settings.cloudProviderName ?? "服务") 连接正常")
+                    results.append("\(settings.llmCloudName ?? "服务") 连接正常")
                 case .anthropic:
                     _ = try await get("https://api.anthropic.com", path: "v1/models",
                                       headers: ["x-api-key": settings.anthropicKey, "anthropic-version": "2023-06-01"])
@@ -207,8 +228,19 @@ struct SettingsView: View {
                 }
             }
             if settings.engine != .llm {
-                _ = try await get(settings.systemOneURL, path: "v1/models")
-                results.append("Kev 正常")
+                switch settings.systemOneProvider {
+                case .kev:
+                    _ = try await get(settings.systemOneURL, path: "v1/models")
+                    results.append("Kev 正常")
+                case .jev:
+                    guard !settings.jevKey.isEmpty else {
+                        check = .failed("还没填 Jev 的 API Key")
+                        return
+                    }
+                    // 查模型列表，不做判断，不花钱
+                    _ = try await get(settings.jevURL, path: "v1/models", headers: ["Authorization": "Bearer \(settings.jevKey)"])
+                    results.append("Jev 连接正常")
+                }
             }
             check = .ok(results.joined(separator: "，"))
         } catch let error as AnalyzerError {

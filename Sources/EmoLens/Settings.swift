@@ -18,8 +18,8 @@ extension Engine: Identifiable {
     var detail: String {
         switch self {
         case .llm: "读潜台词、给回复建议（推荐）"
-        case .combined: "大模型 + Kev 复核严重信号，更稳；需要同时运行 Kev"
-        case .systemOne: "Kev · 校准概率，读不懂潜台词，较慢"
+        case .combined: "大模型 + 决策模型（Kev 或 Jev）复核严重信号，更稳"
+        case .systemOne: "Kev / Jev · 校准概率，读不懂潜台词，没有回复建议"
         }
     }
 }
@@ -39,6 +39,20 @@ enum LLMProvider: String, CaseIterable, Identifiable {
     }
 }
 
+/// 决策模型从哪来。
+enum SystemOneProvider: String, CaseIterable, Identifiable {
+    case kev, jev
+
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .kev: "本机 Kev"
+        case .jev: "Jev（TypeSafe 云端）"
+        }
+    }
+}
+
 /// 聊天对象和我的关系，会写进给模型的上下文。
 let relationships = ["不确定", "恋人", "家人", "朋友", "同事", "同学"]
 
@@ -51,6 +65,9 @@ final class AppSettings: ObservableObject {
     @Published var ollamaURL: String { didSet { defaults.set(ollamaURL, forKey: "ollamaURL") } }
     @Published var ollamaModel: String { didSet { defaults.set(ollamaModel, forKey: "ollamaModel") } }
     @Published var systemOneURL: String { didSet { defaults.set(systemOneURL, forKey: "systemOneURL") } }
+    @Published var systemOneProvider: SystemOneProvider { didSet { defaults.set(systemOneProvider.rawValue, forKey: "systemOneProvider") } }
+    @Published var jevURL: String { didSet { defaults.set(jevURL, forKey: "jevURL") } }
+    @Published var jevModel: String { didSet { defaults.set(jevModel, forKey: "jevModel") } }
     @Published var llmProvider: LLMProvider { didSet { defaults.set(llmProvider.rawValue, forKey: "llmProvider") } }
     @Published var openAIPreset: String { didSet { defaults.set(openAIPreset, forKey: "openAIPreset") } }
     @Published var openAIBaseURL: String { didSet { defaults.set(openAIBaseURL, forKey: "openAIBaseURL") } }
@@ -59,6 +76,7 @@ final class AppSettings: ObservableObject {
     /// API Key 存在钥匙串里，不进 UserDefaults。
     @Published var openAIKey: String { didSet { Keychain.save(openAIKey, for: "openai") } }
     @Published var anthropicKey: String { didSet { Keychain.save(anthropicKey, for: "anthropic") } }
+    @Published var jevKey: String { didSet { Keychain.save(jevKey, for: "typesafe") } }
     @Published var relationship: String { didSet { defaults.set(relationship, forKey: "relationship") } }
     @Published var interval: Double { didSet { defaults.set(interval, forKey: "interval") } }
     /// 分析时参考联系人记忆；把分析结果自动记进联系人记忆。
@@ -80,6 +98,9 @@ final class AppSettings: ObservableObject {
         ollamaURL = defaults.string(forKey: "ollamaURL") ?? "http://127.0.0.1:11434"
         ollamaModel = defaults.string(forKey: "ollamaModel") ?? "qwen3.5:4b"
         systemOneURL = defaults.string(forKey: "systemOneURL") ?? "http://127.0.0.1:8009"
+        systemOneProvider = SystemOneProvider(rawValue: defaults.string(forKey: "systemOneProvider") ?? "") ?? .kev
+        jevURL = defaults.string(forKey: "jevURL") ?? SystemOneSource.jevURL.absoluteString
+        jevModel = defaults.string(forKey: "jevModel") ?? SystemOneSource.jevModel
         llmProvider = LLMProvider(rawValue: defaults.string(forKey: "llmProvider") ?? "") ?? .ollama
         let preset = OpenAIPreset.named(defaults.string(forKey: "openAIPreset") ?? "openai")
         openAIPreset = preset.id
@@ -88,6 +109,7 @@ final class AppSettings: ObservableObject {
         anthropicModel = defaults.string(forKey: "anthropicModel") ?? AnthropicBackend.models[0]
         openAIKey = Keychain.read("openai")
         anthropicKey = Keychain.read("anthropic")
+        jevKey = Keychain.read("typesafe")
         relationship = defaults.string(forKey: "relationship") ?? "不确定"
         interval = defaults.object(forKey: "interval") as? Double ?? 1.5
         autoStartOllama = defaults.object(forKey: "autoStartOllama") as? Bool ?? true
@@ -109,9 +131,15 @@ final class AppSettings: ObservableObject {
         if !preset.model.isEmpty { openAIModel = preset.model }
     }
 
-    /// 云端服务名；用本地模型或只用决策模型时为 nil。界面据此提示消息会不会发出去。
+    /// 所有会收到聊天内容的云端服务（大模型和 Jev），全在本机时为 nil。界面据此提示消息会不会发出去。
     var cloudProviderName: String? {
-        guard engine != .systemOne else { return nil }
+        let names = [engine != .systemOne ? llmCloudName : nil,
+                     engine != .llm && systemOneProvider == .jev ? "TypeSafe（Jev）" : nil].compactMap { $0 }
+        return names.isEmpty ? nil : names.joined(separator: "、")
+    }
+
+    /// 大模型的云端服务名；本地 Ollama 为 nil。
+    var llmCloudName: String? {
         switch llmProvider {
         case .ollama: return nil
         case .openai:
@@ -125,7 +153,18 @@ final class AppSettings: ObservableObject {
     func analyzerConfig() throws -> AnalyzerConfig {
         var config = AnalyzerConfig()
         config.engine = engine
-        config.systemOneURL = try url(systemOneURL)
+        if engine != .llm {
+            switch systemOneProvider {
+            case .kev:
+                config.systemOne = .kev(baseURL: try url(systemOneURL))
+            case .jev:
+                guard !jevKey.isEmpty else { throw AnalyzerError.badResponse("还没填 Jev 的 API Key：设置 → 分析引擎 → 决策模型来源") }
+                config.systemOne = .jev(baseURL: try url(jevURL), model: jevModel.isEmpty ? SystemOneSource.jevModel : jevModel,
+                                        apiKey: jevKey)
+            }
+        }
+        // 只用决策模型时不需要大模型的配置（比如大模型选了云端但还没填密钥）
+        guard engine != .systemOne else { return config }
         switch llmProvider {
         case .ollama:
             config.llm = .ollama(baseURL: try url(ollamaURL), model: ollamaModel)
@@ -135,7 +174,7 @@ final class AppSettings: ObservableObject {
             let preset = OpenAIPreset.named(openAIPreset)
             config.llm = .openAICompatible(baseURL: try url(openAIBaseURL), model: openAIModel, apiKey: openAIKey,
                                            supportsJSONSchema: preset.supportsJSONSchema,
-                                           providerName: cloudProviderName ?? preset.name)
+                                           providerName: llmCloudName ?? preset.name)
         case .anthropic:
             guard !anthropicKey.isEmpty else { throw AnalyzerError.badResponse("还没填 Claude 的 API Key：设置 → 分析引擎 → Anthropic Claude") }
             config.llm = .anthropic(model: anthropicModel, apiKey: anthropicKey)

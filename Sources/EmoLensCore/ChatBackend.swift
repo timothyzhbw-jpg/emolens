@@ -218,7 +218,9 @@ enum HTTP {
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         let object = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any]
         guard (200..<300).contains(status) else {
-            let detail = ((object?["error"] as? [String: Any])?["message"] as? String)
+            // 各家的错误格式不一样：{"error": {"message"}}、{"error": "…"}、{"message"}、{"detail"}
+            let detail = ((object?["error"] as? [String: Any])?["message"] as? String) ?? (object?["error"] as? String)
+                ?? (object?["message"] as? String) ?? (object?["detail"] as? String)
                 ?? String(decoding: responseData.prefix(200), as: UTF8.self)
             throw AnalyzerError.http(service: service, status: status, detail: detail)
         }
