@@ -8,7 +8,15 @@ public struct LLMPrompt: Codable, Sendable {
     }
 
     public var system: String
+    /// 聊天里出现表情、表情包、语音这类方括号内容时才附上的说明。
+    /// 不放进 system：实测放进去以后，纯文字消息的判断也变了（「真给我丢人」的操控 4 次全漏）。
+    public var mediaNote: String?
     public var examples: [Example]
+
+    enum CodingKeys: String, CodingKey {
+        case system, examples, schema
+        case mediaNote = "media_note"
+    }
     /// 输出格式的 JSON Schema 原文（同目录的 emotion.schema.json），云端模型用它做结构化输出。
     public var schema: String?
 
@@ -42,9 +50,17 @@ public struct LLMAnalyzer: EmotionAnalyzer {
             turns.append(ChatTurn(role: "user", content: example.chat))
             turns.append(ChatTurn(role: "assistant", content: try Self.encodeInOrder(example.answer)))
         }
-        turns.append(ChatTurn(role: "user", content: ChatState.render(context: context, latest: latest,
-                                                                     relationship: relationship, memory: memory)))
+        var content = ChatState.render(context: context, latest: latest, relationship: relationship, memory: memory)
+        if let note = prompt.mediaNote, !note.isEmpty, (context + [latest]).contains(where: { Self.hasMedia($0.text) }) {
+            content += "\n\n" + note
+        }
+        turns.append(ChatTurn(role: "user", content: content))
         return turns
+    }
+
+    /// 「[表情：捂脸]」「[语音 5秒]」「[图片]」，以及手动粘贴时微信的「[捂脸]」这类表情代码。
+    static func hasMedia(_ text: String) -> Bool {
+        text.range(of: #"\[[^\[\]\s]{1,40}\]"#, options: .regularExpression) != nil
     }
 
     public func analyze(context: [ChatMessage], latest: ChatMessage) async throws -> EmotionReport {

@@ -19,6 +19,21 @@ enum EmoLensMain {
                 exit(1)
             }
         }
+        // EmoLens --inspect 截图.png：把一张聊天区域截图走一遍识别流程，打印认出的气泡和消息（排查识别问题用）。
+        if let i = args.firstIndex(of: "--inspect"), i + 1 < args.count {
+            _ = NSApplication.shared
+            exit(Inspector.run(URL(fileURLWithPath: args[i + 1]), analyze: args.contains("--analyze")) ? 0 : 1)
+        }
+        // EmoLens --replay 1.png 2.png …：把几张聊天区域截图依次当成新画面，走一遍监控和分析（测试用，不截屏）。
+        if let i = args.firstIndex(of: "--replay"), i + 1 < args.count {
+            _ = NSApplication.shared
+            let urls = args[(i + 1)...].map { URL(fileURLWithPath: $0) }
+            Task { @MainActor in
+                await Inspector.replay(urls)
+                exit(0)
+            }
+            RunLoop.main.run()
+        }
         // EmoLens --eval 输入.jsonl 输出.jsonl：批量分析，用来跑评测集。
         if let i = args.firstIndex(of: "--eval"), i + 2 < args.count {
             _ = NSApplication.shared

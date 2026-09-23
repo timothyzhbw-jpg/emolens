@@ -101,4 +101,25 @@ final class MessageTrackerTests: XCTestCase {
         XCTAssertFalse(MessageTracker.similar("abc", "abcdef"))
         XCTAssertFalse(MessageTracker.similar("abcdefghij", "abcdefghXY"))
     }
+
+    func testVoiceGettingTranscribedIsPickedUpAgain() {
+        // 对方发了语音 → 用户在微信里点「转文字」→ 同一条消息变成了文字，应当被当成新内容重新分析
+        let tracker = MessageTracker()
+        let before = [ChatMessage(speaker: .me, text: "别这样嘛，我十点前一定回来", top: 0.1),
+                      ChatMessage(speaker: .them, text: "[语音 6秒]", top: 0.3,
+                                  attachment: Attachment(kind: .voice, seconds: 6))]
+        _ = tracker.update(before)
+        var after = before
+        after[1] = ChatMessage(speaker: .them, text: "[语音转文字] 那你到底几点回来啊", top: 0.3,
+                               attachment: Attachment(kind: .voice, seconds: 6, transcribed: true))
+        let changed: [ChatMessage]
+        switch tracker.update(after) {
+        case .appended(let new), .reset(let new): changed = new
+        case .unchanged: changed = []
+        }
+        let latest = changed.last { $0.speaker == .them }
+        XCTAssertEqual(latest?.attachment?.transcribed, true)
+        XCTAssertEqual(tracker.update(after), .unchanged, "转好之后画面不变，不再重复分析")
+    }
 }
+

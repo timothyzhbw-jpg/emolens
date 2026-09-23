@@ -68,6 +68,8 @@ final class AppSettings: ObservableObject {
     @Published var manualMode: Bool { didSet { defaults.set(manualMode, forKey: "manualMode") } }
     @Published var useMemory: Bool { didSet { defaults.set(useMemory, forKey: "useMemory") } }
     @Published var autoRecordMemory: Bool { didSet { defaults.set(autoRecordMemory, forKey: "autoRecordMemory") } }
+    /// 对方发表情、表情包时，把那一小块截图交给模型看懂。
+    @Published var readImages: Bool { didSet { defaults.set(readImages, forKey: "readImages") } }
     @Published var windowID: CGWindowID { didSet { defaults.set(Int(windowID), forKey: "windowID") } }
     @Published var region: CGRect {
         didSet { defaults.set([region.minX, region.minY, region.width, region.height], forKey: "region") }
@@ -92,6 +94,7 @@ final class AppSettings: ObservableObject {
         manualMode = defaults.bool(forKey: "manualMode")
         useMemory = defaults.object(forKey: "useMemory") as? Bool ?? true
         autoRecordMemory = defaults.object(forKey: "autoRecordMemory") as? Bool ?? true
+        readImages = defaults.object(forKey: "readImages") as? Bool ?? true
         windowID = CGWindowID(defaults.integer(forKey: "windowID"))
         // 兼容数字被存成字符串的情况（例如用 defaults write 命令写入）。
         let r = (defaults.array(forKey: "region") ?? []).compactMap { ($0 as? NSNumber)?.doubleValue ?? Double("\($0)") }

@@ -4,10 +4,13 @@ import Foundation
 public struct ChatTurn: Sendable, Equatable {
     public var role: String
     public var content: String
+    /// 附带的 PNG 图片（看表情、表情包时用）。模型要支持看图。
+    public var images: [Data]
 
-    public init(role: String, content: String) {
+    public init(role: String, content: String, images: [Data] = []) {
         self.role = role
         self.content = content
+        self.images = images
     }
 }
 
@@ -29,10 +32,19 @@ public struct OllamaBackend: ChatBackend {
     public var name: String { "本地大模型 · \(model)" }
     public var cloudProvider: String? { nil }
     public static let keepAlive = "30m"
+    public static let contextLength = 6144
 
     public init(baseURL: URL = URL(string: "http://127.0.0.1:11434")!, model: String = "qwen3.5:4b") {
         self.baseURL = baseURL
         self.model = model
+    }
+
+    /// 模型能不能看图（Ollama 的 /api/show 里 capabilities 含 vision）。查不到时返回 nil。
+    public func supportsVision() async -> Bool? {
+        guard let response = try? await HTTP.post(baseURL.appending(path: "api/show"), body: ["model": model],
+                                                  service: "Ollama", timeout: 5),
+              let capabilities = response["capabilities"] as? [String] else { return nil }
+        return capabilities.contains("vision")
     }
 
     public func complete(system: String, turns: [ChatTurn], schema: String?) async throws -> String {
@@ -41,10 +53,19 @@ public struct OllamaBackend: ChatBackend {
             "model": model, "stream": false, "think": false, "format": "json",
             // Ollama 默认闲置 5 分钟就卸载模型，下次要多等 8 秒以上；聊天常常隔一阵才来一条，留 30 分钟。
             "keep_alive": OllamaBackend.keepAlive,
-            "options": ["temperature": 0.2],
-            "messages": [["role": "system", "content": system]] + turns.map { ["role": $0.role, "content": $0.content] },
+            // Ollama 默认上下文只有 4096：提示词和示例就占了约 4000，再加上聊天和记忆，输出会被截成半个 JSON。
+            // 实测 qwen3.5:4b 读 4000 字的提示：6144 时 0.8 秒，8192 时 1.6 秒，所以取 6144。
+            "options": ["temperature": 0.2, "num_ctx": OllamaBackend.contextLength],
+            "messages": [["role": "system", "content": system]] + turns.map { turn -> [String: Any] in
+                var message: [String: Any] = ["role": turn.role, "content": turn.content]
+                if !turn.images.isEmpty { message["images"] = turn.images.map { $0.base64EncodedString() } }
+                return message
+            },
         ]
         let response = try await HTTP.post(baseURL.appending(path: "api/chat"), body: body, service: "Ollama")
+        if response["done_reason"] as? String == "length" {
+            throw AnalyzerError.badResponse("本地模型的输出被截断了（上下文不够长）")
+        }
         guard let content = (response["message"] as? [String: Any])?["content"] as? String else {
             throw AnalyzerError.badResponse("Ollama 返回里缺少 message.content")
         }
@@ -77,7 +98,11 @@ public struct OpenAICompatibleBackend: ChatBackend {
     public func complete(system: String, turns: [ChatTurn], schema: String?) async throws -> String {
         var body: [String: Any] = [
             "model": model,
-            "messages": [["role": "system", "content": system]] + turns.map { ["role": $0.role, "content": $0.content] },
+            "messages": [["role": "system", "content": system]] + turns.map { turn -> [String: Any] in
+                guard !turn.images.isEmpty else { return ["role": turn.role, "content": turn.content] }
+                let images = turn.images.map { ["type": "image_url", "image_url": ["url": "data:image/png;base64," + $0.base64EncodedString()]] }
+                return ["role": turn.role, "content": [["type": "text", "text": turn.content]] + images]
+            },
         ]
         // 不传 temperature：推理类模型（如 gpt-5.5）只接受默认值。
         if supportsJSONSchema, schema != nil {
@@ -131,7 +156,13 @@ public struct AnthropicBackend: ChatBackend {
             "model": model,
             "max_tokens": 16000,   // 思考也计入 max_tokens，留足空间避免截断
             "system": system,
-            "messages": turns.map { ["role": $0.role, "content": $0.content] },
+            "messages": turns.map { turn -> [String: Any] in
+                guard !turn.images.isEmpty else { return ["role": turn.role, "content": turn.content] }
+                let images: [[String: Any]] = turn.images.map {
+                    ["type": "image", "source": ["type": "base64", "media_type": "image/png", "data": $0.base64EncodedString()]]
+                }
+                return ["role": turn.role, "content": images + [["type": "text", "text": turn.content]]]
+            },
             "cache_control": ["type": "ephemeral"],   // system + 示例是固定前缀，自动缓存
         ]
         if schema != nil {

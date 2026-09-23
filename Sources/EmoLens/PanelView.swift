@@ -591,6 +591,10 @@ struct Notices: View {
         } else if case .failed(let message) = monitor.ollamaStatus {
             Notice(symbol: "exclamationmark.triangle", tint: .orange, title: "本地模型没能启动", text: message) { EmptyView() }
         }
+        if let seconds = monitor.pendingVoice {
+            Notice(symbol: "waveform", tint: .blue, title: seconds > 0 ? "对方发来一条 \(seconds) 秒的语音" : "对方发来一条语音",
+                   text: "EmoLens 听不到语音内容。在微信里右键这条语音 →「转文字」，转好后会自动接着分析。") { EmptyView() }
+        }
         if let error = monitor.analysisError {
             Notice(symbol: "bolt.horizontal.circle", tint: .orange, title: "这条消息没分析成功", text: error) {
                 if monitor.canRetry {

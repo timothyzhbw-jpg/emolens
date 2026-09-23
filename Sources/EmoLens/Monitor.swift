@@ -31,6 +31,8 @@ final class Monitor: ObservableObject {
     @Published private(set) var analysisError: String?
     @Published private(set) var preview: CGImage?
     @Published private(set) var windowName = ""
+    /// 对方最新一条是还没转文字的语音（秒数，读不出时长时为 0）。转成文字之前没有内容可分析。
+    @Published private(set) var pendingVoice: Int?
     /// 本地模型的状态：是否正在启动，以及启动结果。
     @Published private(set) var startingOllama = false
     @Published private(set) var ollamaStatus: OllamaLauncher.Status?
@@ -46,11 +48,16 @@ final class Monitor: ObservableObject {
     private var tracker = MessageTracker()
     private var loop: Task<Void, Never>?
     private var signature: FrameSignature?
-    private typealias Job = (context: [ChatMessage], latest: ChatMessage, contact: String?)
+    /// images：消息里有表情、表情包时的截图（表情一个一张），先交给模型看懂再分析。
+    private typealias Job = (context: [ChatMessage], latest: ChatMessage, contact: String?, images: [CGImage])
     private var pending: Job?
     private var failed: Job?
     private var previewRunning = false
     private var analyzedKeys: [String] = []
+    /// 看过的表情图 → 名字或描述。同一个表情、表情包常被反复发，不用每次都问模型。
+    private var descriptions: [String: String] = [:]
+    /// 这个模型不能看图（Ollama 查到的能力，或者云端返回了错误），这次运行里不再尝试。
+    private var noVision: Set<String> = []
     private var ollamaChecked = false
     private var ollamaRetried = false
     private var warmedUp = false
@@ -164,6 +171,7 @@ final class Monitor: ObservableObject {
         loop?.cancel()
         loop = nil
         status = .paused
+        pendingVoice = nil
     }
 
     /// 换了窗口或区域后，从头开始比对。
@@ -176,7 +184,8 @@ final class Monitor: ObservableObject {
 
     /// 预览渲染用：直接设定界面状态，不截图也不分析。
     func loadPreview(status: Status, reports: [EmotionReport], analyzing: Bool = false,
-                     windowName: String = "微信", error: String? = nil, preview: CGImage? = nil) {
+                     windowName: String = "微信", error: String? = nil, preview: CGImage? = nil, pendingVoice: Int? = nil) {
+        self.pendingVoice = pendingVoice
         self.status = status
         self.reports = reports
         self.analyzing = analyzing
@@ -185,7 +194,7 @@ final class Monitor: ObservableObject {
         self.preview = preview
         self.detectedContact = reports.first?.contact
         self.previewRunning = status == .watching
-        if error != nil { failed = ([], ChatMessage(speaker: .them, text: "", top: 0), nil) }
+        if error != nil { failed = ([], ChatMessage(speaker: .them, text: "", top: 0), nil, []) }
     }
 
     func clearHistory() {
@@ -226,19 +235,37 @@ final class Monitor: ObservableObject {
             }
             preview = frame
             status = .watching
-            guard let chat = WindowCapture.crop(frame, to: settings.region),
-                  let current = FrameSignature(chat), current.differs(from: signature) else { return }
-            signature = current
-            let lines = try await Task.detached(priority: .userInitiated) { try TextRecognizer.recognize(chat) }.value
-            let messages = ChatParser.parse(lines)
-            let them = messages.filter { $0.speaker == .them }.count
-            log.notice("frame changed: \(chat.width)x\(chat.height)px, \(lines.count) OCR lines, \(messages.count) messages (\(them) from them)")
-            let event = tracker.update(messages)
-            if case .reset = event { await detectContact(in: frame) } else if detectedContact == nil { await detectContact(in: frame) }
-            handle(event)
+            guard let chat = WindowCapture.crop(frame, to: settings.region) else { return }
+            try await process(chat, frame: frame)
         } catch {
             log.error("tick failed: \(error.localizedDescription, privacy: .public)")
             status = Self.isPermissionError(error) ? .needsPermission : .failed(error.localizedDescription)
+        }
+    }
+
+    /// 截好的聊天区域 → 认出消息 → 有新消息就排队分析。frame 是整个窗口（用来读标题栏里的名字），回放测试时为 nil。
+    private func process(_ chat: CGImage, frame: CGImage?) async throws {
+        guard let current = FrameSignature(chat), current.differs(from: signature) else { return }
+        signature = current
+        let reading = try await Task.detached(priority: .userInitiated) { try ChatReader.read(chat) }.value
+        let messages = reading.messages
+        let them = messages.filter { $0.speaker == .them }.count
+        // 只记数量，不记内容
+        let count = { (kind: Attachment.Kind) in messages.filter { $0.attachment?.kind == kind }.count }
+        log.notice("frame changed: \(chat.width)x\(chat.height)px, \(reading.lines.count) OCR lines, \(reading.layout.count) blocks (\(reading.layout.filter { $0.kind == .avatar }.count) avatars), \(messages.count) messages (\(them) from them; voice \(count(.voice)), emoji \(count(.emoji)), sticker \(count(.sticker)), image \(count(.image)))")
+        let event = tracker.update(messages)
+        if let frame {
+            if case .reset = event { await detectContact(in: frame) } else if detectedContact == nil { await detectContact(in: frame) }
+        }
+        handle(event, chat: chat)
+    }
+
+    /// 回放测试（EmoLens --replay）：把几张聊天区域截图依次当成新画面处理，每张都等分析做完。不截屏、不弹窗口。
+    func replay(_ images: [CGImage], after: (Int) -> Void) async {
+        for (index, image) in images.enumerated() {
+            do { try await process(image, frame: nil) } catch { log.error("replay failed: \(error.localizedDescription, privacy: .public)") }
+            while analyzing || pending != nil { try? await Task.sleep(for: .milliseconds(100)) }
+            after(index)
         }
     }
 
@@ -256,7 +283,7 @@ final class Monitor: ObservableObject {
         }
     }
 
-    private func handle(_ event: TrackerEvent) {
+    private func handle(_ event: TrackerEvent, chat: CGImage) {
         let messages: [ChatMessage]
         switch event {
         case .unchanged: return
@@ -265,16 +292,24 @@ final class Monitor: ObservableObject {
         }
         let kind = if case .reset = event { "reset" } else { "appended" }
         log.notice("tracker \(kind, privacy: .public): \(messages.count) messages")
-        if let latest = messages.last(where: { $0.speaker == .them }) { enqueue(latest) }
+        guard let latest = messages.last(where: { $0.speaker == .them }) else { return }
+        if let voice = latest.attachment, voice.isUntranscribedVoice {
+            // 语音还没转文字：只有时长，分析不出东西。提示用户在微信里转文字，转好后画面变了会自动接着分析。
+            pendingVoice = voice.seconds ?? 0
+            log.notice("latest is an untranscribed voice message (\(voice.seconds ?? 0) s)")
+            return
+        }
+        pendingVoice = nil
+        enqueue(latest, images: ChatReader.visualCrops(for: latest, in: chat))
     }
 
-    private func enqueue(_ latest: ChatMessage) {
+    private func enqueue(_ latest: ChatMessage, images: [CGImage]) {
         let context = contextBefore(latest)
         let key = MessageTracker.normalize((context.last?.text ?? "") + "|" + latest.text)
         guard !analyzedKeys.contains(key) else { return }
         log.notice("queue analysis: \(latest.text, privacy: .private)")
         analyzedKeys = Array((analyzedKeys + [key]).suffix(100))
-        pending = (context, latest, currentContact)
+        pending = (context, latest, currentContact, images)
         if !analyzing { Task { await drain() } }
     }
 
@@ -306,7 +341,7 @@ final class Monitor: ObservableObject {
         let latest = parsed.messages[index]
         let context = Array(parsed.messages[..<index].suffix(10))
         analysisError = nil
-        pending = (context, latest, manualContact ?? latest.sender)
+        pending = (context, latest, manualContact ?? latest.sender, [])
         if !analyzing { Task { await drain() } }
     }
 
@@ -336,7 +371,8 @@ final class Monitor: ObservableObject {
                 let contactMemory = job.contact.map(memory.memory(for:))
                 let summary = settings.useMemory ? contactMemory?.promptSummary() : nil
                 let analyzer = try settings.analyzerConfig().makeAnalyzer(relationship: relationship(for: job.contact), memory: summary)
-                let analyzed = try await analyzer.analyze(context: job.context, latest: job.latest)
+                let latest = await describeImage(job)
+                let analyzed = try await analyzer.analyze(context: job.context, latest: latest)
                 var report = MemoryHints.apply(to: MoneyNet.apply(to: SafetyNet.apply(to: analyzed)))
                 report.contact = job.contact
                 if settings.autoRecordMemory, let contact = job.contact { editMemory(contact) { $0.record(report) } }
@@ -359,6 +395,39 @@ final class Monitor: ObservableObject {
                 failed = job
             }
         }
+    }
+
+    /// 消息里有表情、表情包时，先让模型看一眼截图，把「[表情]」换成「[表情：捂脸]」这样的描述。
+    /// 看不了（模型不支持看图、设置里关了、出错）就保留占位符，照样分析文字。
+    private func describeImage(_ job: Job) async -> ChatMessage {
+        let images = job.images.compactMap(Self.png)
+        guard !images.isEmpty, settings.readImages, settings.engine != .systemOne,
+              let backend = try? settings.analyzerConfig().llm.backend(), !noVision.contains(backend.name) else { return job.latest }
+        if let ollama = backend as? OllamaBackend, await ollama.supportsVision() == false {
+            noVision.insert(backend.name)
+            log.notice("model cannot read images, keeping placeholders")
+            return job.latest
+        }
+        let start = Date()
+        do {
+            let (message, learned) = try await VisualDescriber(backend: backend).read(job.latest, images: images, known: descriptions)
+            if descriptions.count > 200 { descriptions.removeAll() }
+            descriptions.merge(learned) { $1 }
+            log.notice("read \(images.count) image(s) of \(job.latest.attachment?.kind.rawValue ?? "", privacy: .public) in \(Int(Date().timeIntervalSince(start) * 1000)) ms (\(images.count - learned.count) cached)")
+            return message
+        } catch AnalyzerError.http(_, let status, _) where status == 400 || status == 404 || status == 422 {
+            noVision.insert(backend.name)   // 多半是模型不支持图片输入
+            log.notice("image description rejected (\(status)), keeping placeholders")
+            return job.latest
+        } catch {
+            log.error("image description failed: \(Self.category(error), privacy: .public)")
+            return job.latest
+        }
+    }
+
+    nonisolated static func png(_ image: CGImage) -> Data? {
+        let rep = NSBitmapImageRep(cgImage: image)
+        return rep.representation(using: .png, properties: [:])
     }
 
     /// 仅当设置了环境变量 EMOLENS_LOG 时，把结果追加写进该文件（调试用，默认不落盘）。

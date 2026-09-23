@@ -87,11 +87,25 @@ final class AnalyzerTests: XCTestCase {
         XCTAssertFalse(ChatState.render(context: [], latest: latest, relationship: "不确定").contains("双方关系"))
     }
 
+    func testMediaNoteOnlyWhenChatHasEmojiOrVoice() throws {
+        let prompt = LLMPrompt(system: "系统", mediaNote: "（说明：方括号）", examples: [])
+        let analyzer = LLMAnalyzer(backend: OllamaBackend(), prompt: prompt)
+        let me = ChatMessage(speaker: .me, text: "今晚加班", top: 0)
+        let plain = try analyzer.turns(context: [me], latest: ChatMessage(speaker: .them, text: "好的", top: 1))
+        XCTAssertFalse(plain.last!.content.contains("说明"), "纯文字消息的提示和以前完全一样")
+        for text in ["好的[表情：微笑]", "[语音转文字] 你几点回", "好的[微笑]"] {
+            let turns = try analyzer.turns(context: [me], latest: ChatMessage(speaker: .them, text: text, top: 1))
+            XCTAssertTrue(turns.last!.content.hasSuffix("（说明：方括号）"), text)
+        }
+        XCTAssertFalse(LLMAnalyzer.hasMedia("我觉得 [ 这个 ] 还行"))
+    }
+
     func testBundledPresetsLoad() throws {
         let presets = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .appending(path: "../../presets").standardized
         let prompt = try LLMPrompt.load(from: presets.appending(path: "emotion.llm.zh.json"))
         XCTAssertGreaterThanOrEqual(prompt.examples.count, 6)
+        XCTAssertTrue(prompt.mediaNote?.contains("微笑") == true)
         for example in prompt.examples {
             XCTAssertNotNil(example.answer["consistency"], example.chat)
             XCTAssertNotNil(example.answer["suggested_reply"], example.chat)

@@ -80,6 +80,15 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Toggle("看懂表情和表情包", isOn: $settings.readImages)
+                } header: {
+                    Text("表情")
+                } footer: {
+                    Text("对方发表情、表情包时，把那一小块截图交给分析模型看（每条多约 1 秒）。模型不支持看图时自动跳过，只按「[表情]」分析。用云端模型时，这块截图也会发送给服务商。")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+
+                Section {
                     Toggle("分析时参考联系人记忆", isOn: $settings.useMemory)
                     Toggle("自动记录每次的分析结果", isOn: $settings.autoRecordMemory)
                     let contacts = monitor.memory.contacts.values.sorted { $0.name < $1.name }
@@ -154,7 +163,7 @@ struct SettingsView: View {
     }
 
     private var cloudNote: some View {
-        Label("云端模式：对方的消息和最近约 10 条聊天会发送给 \(settings.cloudProviderName ?? "云端服务") 分析。API Key 只保存在本机钥匙串里。",
+        Label("云端模式：对方的消息和最近约 10 条聊天（以及对方发的表情截图）会发送给 \(settings.cloudProviderName ?? "云端服务") 分析。API Key 只保存在本机钥匙串里。",
               systemImage: "icloud.and.arrow.up")
             .font(.system(size: 11)).foregroundStyle(.orange)
     }

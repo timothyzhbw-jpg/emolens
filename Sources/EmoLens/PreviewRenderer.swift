@@ -66,6 +66,7 @@ enum PreviewRenderer {
         ("manipulation", { $0.loadPreview(status: .watching, reports: [Sample.manipulation, Sample.sarcasm]) }),
         ("safety", { $0.loadPreview(status: .watching, reports: [Sample.selfHarm]) }),
         ("analyzing", { $0.loadPreview(status: .watching, reports: [Sample.coy], analyzing: true) }),
+        ("voice-emoji", { $0.loadPreview(status: .watching, reports: [Sample.smileEmoji], pendingVoice: 6) }),
         ("onboarding", { $0.loadPreview(status: .noWindow(chosen: false), reports: [], windowName: "") }),
         ("error", { $0.loadPreview(status: .watching, reports: [],
                                    error: "连不上分析引擎（本地大模型）。请先在终端运行 ollama serve。") }),
@@ -133,6 +134,12 @@ enum Sample {
         "哼，这还差不多，快点回来陪我", emotion: "亲昵", intensity: 1, flags: [:], response: "正常聊天",
         consistency: "撒娇", literal: "这还差不多", meaning: "已经消气了，在撒娇等你回去",
         reply: "遵命！二十分钟到家，蛋糕给你留着最大块", latency: 2900, minutesAgo: 2)
+
+    static let smileEmoji = report(
+        "好的[表情：微笑]", emotion: "失望", intensity: 2, flags: [.angryAtMe: 1, .sarcasm: 1, .perfunctory: 1],
+        response: "真诚道歉", consistency: "反话", literal: "好的，配了一个微笑表情",
+        meaning: "又被放鸽子了，心里不高兴，用微笑表情表示无语", reply: "对不起，又让你等了。周六我空出来，带你去吃你想吃的那家，好不好？",
+        latency: 4300, minutesAgo: 0)
 
     static let perfunctory = report(
         "嗯", emotion: "冷淡", intensity: 1, flags: [.perfunctory: 1, .coldDistance: 1], response: "给对方空间",

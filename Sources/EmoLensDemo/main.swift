@@ -4,9 +4,19 @@ import AppKit
 import SwiftUI
 
 struct Line: Identifiable {
-    let id = UUID()
+    enum Kind {
+        case text
+        /// 语音：秒数；转文字之后才有 transcript
+        case voice(Int)
+        /// 表情包：画一个卡通脸，下面配字
+        case sticker
+    }
+
+    var id = UUID()
     let fromMe: Bool
     let text: String
+    var kind = Kind.text
+    var transcript: String?
 }
 
 let opening = [
@@ -14,12 +24,20 @@ let opening = [
     Line(fromMe: false, text: "哦"),
 ]
 
-let script: [[Line]] = [
-    [Line(fromMe: false, text: "没关系呀，你工作最重要嘛，我算什么")],
-    [Line(fromMe: true, text: "别这样嘛，我十点前一定回来"), Line(fromMe: false, text: "嗯")],
-    [Line(fromMe: true, text: "给你带了你最爱的那家蛋糕"), Line(fromMe: false, text: "哼，这还差不多，快点回来陪我")],
-    [Line(fromMe: false, text: "对了，下周三是我生日，你可别忘了哦")],
-    [Line(fromMe: false, text: "你要是真在乎我，就把手机密码告诉我，不然就是心里有鬼")],
+/// 每一步：追加几条消息；或者把最后一条语音「转文字」（模拟在微信里右键 → 转文字）。
+enum Step {
+    case add([Line])
+    case transcribe(String)
+}
+
+let script: [Step] = [
+    .add([Line(fromMe: false, text: "没关系呀，你工作最重要嘛，我算什么")]),
+    .add([Line(fromMe: true, text: "别这样嘛，我十点前一定回来"), Line(fromMe: false, text: "好的🙂")]),
+    .add([Line(fromMe: false, text: "", kind: .voice(6))]),
+    .transcribe("那你到底几点回来啊，我都等困了"),
+    .add([Line(fromMe: true, text: "给你带了你最爱的那家蛋糕"), Line(fromMe: false, text: "哼", kind: .sticker)]),
+    .add([Line(fromMe: false, text: "对了，下周三是我生日，你可别忘了哦😘")]),
+    .add([Line(fromMe: false, text: "你要是真在乎我，就把手机密码告诉我，不然就是心里有鬼")]),
 ]
 
 @MainActor
@@ -29,7 +47,14 @@ final class Conversation: ObservableObject {
 
     func advance() {
         guard step < script.count else { return }
-        lines += script[step]
+        switch script[step] {
+        case .add(let new):
+            lines += new
+        case .transcribe(let text):
+            if let index = lines.lastIndex(where: { if case .voice = $0.kind { true } else { false } }) {
+                lines[index].transcript = text
+            }
+        }
         step += 1
     }
 }
@@ -65,13 +90,49 @@ struct Bubble: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             if line.fromMe { Spacer(minLength: 60) } else { avatar(.orange) }
+            VStack(alignment: line.fromMe ? .trailing : .leading, spacing: 4) {
+                content
+                if let transcript = line.transcript {
+                    // 转文字的结果：贴在语音下面的浅色框
+                    Text(transcript)
+                        .font(.system(size: 14))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 12).padding(.vertical, 9)
+                        .background(Color.white.opacity(0.6), in: RoundedRectangle(cornerRadius: 5))
+                }
+            }
+            if line.fromMe { avatar(.blue) } else { Spacer(minLength: 60) }
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        let fill = line.fromMe ? Color(red: 0.58, green: 0.93, blue: 0.41) : Color.white
+        switch line.kind {
+        case .text:
             Text(line.text)
                 .font(.system(size: 14))
                 .foregroundStyle(.black)
                 .padding(.horizontal, 12).padding(.vertical, 9)
-                .background(line.fromMe ? Color(red: 0.58, green: 0.93, blue: 0.41) : .white,
-                            in: RoundedRectangle(cornerRadius: 5))
-            if line.fromMe { avatar(.blue) } else { Spacer(minLength: 60) }
+                .background(fill, in: RoundedRectangle(cornerRadius: 5))
+        case .voice(let seconds):
+            HStack(spacing: 6) {
+                Image(systemName: "wave.3.right").font(.system(size: 14))
+                Text("\(seconds)\"").font(.system(size: 14))
+            }
+            .foregroundStyle(.black)
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            .frame(width: 70 + CGFloat(seconds) * 3, alignment: .leading)
+            .background(fill, in: RoundedRectangle(cornerRadius: 5))
+        case .sticker:
+            VStack(spacing: 6) {
+                ZStack {
+                    Circle().fill(Color(red: 1, green: 0.75, blue: 0.3)).frame(width: 80, height: 80)
+                    HStack(spacing: 18) { Circle().fill(.black).frame(width: 9); Circle().fill(.black).frame(width: 9) }.offset(y: -8)
+                    Capsule().fill(Color(red: 0.8, green: 0.2, blue: 0.2)).frame(width: 26, height: 7).offset(y: 16)
+                }
+                Text(line.text).font(.system(size: 22, weight: .black)).foregroundStyle(Color(red: 0.9, green: 0.2, blue: 0.3))
+            }
+            .frame(width: 110, height: 125)
         }
     }
 

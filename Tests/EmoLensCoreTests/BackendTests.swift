@@ -60,6 +60,50 @@ final class BackendTests: XCTestCase {
     private var sent: [String: Any] { (try? JSONSerialization.jsonObject(with: MockURLProtocol.lastBody) as? [String: Any]) ?? [:] }
     private func header(_ name: String) -> String? { MockURLProtocol.lastRequest?.value(forHTTPHeaderField: name) }
 
+    // MARK: 图片（看表情、表情包）
+
+    private let imageTurn = [ChatTurn(role: "user", content: "这是什么表情", images: [Data([0x89, 0x50])])]
+
+    func testOllamaSendsImagesAndLargerContext() async throws {
+        respond(#"{"message": {"content": "{\"emoji\": \"捂脸\"}"}, "done_reason": "stop"}"#)
+        _ = try await OllamaBackend().complete(system: "只输出 JSON", turns: imageTurn, schema: nil)
+        let messages = try XCTUnwrap(sent["messages"] as? [[String: Any]])
+        XCTAssertEqual(messages.last?["images"] as? [String], ["iVA="])
+        XCTAssertEqual((sent["options"] as? [String: Any])?["num_ctx"] as? Int, OllamaBackend.contextLength)
+    }
+
+    func testOllamaTruncatedOutputIsReported() async {
+        respond(#"{"message": {"content": "{\"literal\": \"好"}, "done_reason": "length"}"#)
+        do {
+            _ = try await OllamaBackend().complete(system: "", turns: turns, schema: nil)
+            XCTFail("截断应当报错")
+        } catch AnalyzerError.badResponse(let detail) {
+            XCTAssertTrue(detail.contains("截断"))
+        } catch {
+            XCTFail("\(error)")
+        }
+    }
+
+    func testOpenAISendsImageAsDataURL() async throws {
+        respond(#"{"choices": [{"finish_reason": "stop", "message": {"content": "{}"}}]}"#)
+        _ = try await OpenAICompatibleBackend(apiKey: "sk-test").complete(system: "只输出 JSON", turns: imageTurn, schema: nil)
+        let messages = try XCTUnwrap(sent["messages"] as? [[String: Any]])
+        let parts = try XCTUnwrap(messages.last?["content"] as? [[String: Any]])
+        XCTAssertEqual(parts.first?["type"] as? String, "text")
+        XCTAssertEqual((parts.last?["image_url"] as? [String: Any])?["url"] as? String, "data:image/png;base64,iVA=")
+    }
+
+    func testAnthropicSendsImageBlockBeforeText() async throws {
+        respond(#"{"stop_reason": "end_turn", "content": [{"type": "text", "text": "{}"}]}"#)
+        _ = try await AnthropicBackend(apiKey: "k").complete(system: "只输出 JSON", turns: imageTurn, schema: nil)
+        let messages = try XCTUnwrap(sent["messages"] as? [[String: Any]])
+        let blocks = try XCTUnwrap(messages.last?["content"] as? [[String: Any]])
+        XCTAssertEqual(blocks.map { $0["type"] as? String }, ["image", "text"])
+        let source = try XCTUnwrap(blocks.first?["source"] as? [String: Any])
+        XCTAssertEqual(source["media_type"] as? String, "image/png")
+        XCTAssertEqual(source["data"] as? String, "iVA=")
+    }
+
     // MARK: OpenAI 兼容
 
     func testOpenAIRequestUsesStrictSchemaAndBearerKey() async throws {
