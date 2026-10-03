@@ -1,0 +1,31 @@
+# 临时：在 macOS 上渲染英文界面截图并提交回这个分支（云端会话是 Linux，渲染不了 SwiftUI）。用完即删。
+name: Screenshots
+
+on:
+  push:
+    branches: ['claude/lucid-feynman-n4457f']
+    paths: ['.github/workflows/screenshots.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - name: Render English previews
+        run: |
+          swift run EmoLens --render-previews previews/en --language en
+          mkdir -p docs/screenshots/en
+          for name in report manipulation-dark manual memory safety voice-emoji onboarding memory-sheet; do
+            cp "previews/en/$name.png" "docs/screenshots/en/$name.png"
+          done
+      - name: Commit screenshots
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots/en
+          git commit -m "Add English UI screenshots rendered on macOS [skip ci]"
+          git push
