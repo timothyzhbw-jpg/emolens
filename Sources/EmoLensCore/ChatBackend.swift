@@ -29,7 +29,7 @@ public protocol ChatBackend: Sendable {
 public struct OllamaBackend: ChatBackend {
     public var baseURL: URL
     public var model: String
-    public var name: String { "本地大模型 · \(model)" }
+    public var name: String { L("本地大模型 · \(model)", "Local model · \(model)") }
     public var cloudProvider: String? { nil }
     public static let keepAlive = "30m"
     public static let contextLength = 6144
@@ -64,10 +64,10 @@ public struct OllamaBackend: ChatBackend {
         ]
         let response = try await HTTP.post(baseURL.appending(path: "api/chat"), body: body, service: "Ollama")
         if response["done_reason"] as? String == "length" {
-            throw AnalyzerError.badResponse("本地模型的输出被截断了（上下文不够长）")
+            throw AnalyzerError.badResponse(L("本地模型的输出被截断了（上下文不够长）", "the local model's output was cut off (context too short)"))
         }
         guard let content = (response["message"] as? [String: Any])?["content"] as? String else {
-            throw AnalyzerError.badResponse("Ollama 返回里缺少 message.content")
+            throw AnalyzerError.badResponse(L("Ollama 返回里缺少 message.content", "Ollama's reply has no message.content"))
         }
         return content
     }
@@ -115,16 +115,16 @@ public struct OpenAICompatibleBackend: ChatBackend {
                                            headers: ["Authorization": "Bearer \(apiKey)"], rawSchema: schema, service: providerName)
         guard let choice = (response["choices"] as? [[String: Any]])?.first,
               let message = choice["message"] as? [String: Any] else {
-            throw AnalyzerError.badResponse("\(providerName) 返回里缺少 choices[0].message")
+            throw AnalyzerError.badResponse(L("\(providerName) 返回里缺少 choices[0].message", "\(providerName)'s reply has no choices[0].message"))
         }
         if let refusal = message["refusal"] as? String, !refusal.isEmpty {
-            throw AnalyzerError.refused("\(providerName) 拒绝了这次请求：\(refusal)")
+            throw AnalyzerError.refused(L("\(providerName) 拒绝了这次请求：\(refusal)", "\(providerName) declined this request: \(refusal)"))
         }
         if choice["finish_reason"] as? String == "length" {
-            throw AnalyzerError.badResponse("\(providerName) 的输出被截断了（finish_reason: length）")
+            throw AnalyzerError.badResponse(L("\(providerName) 的输出被截断了（finish_reason: length）", "\(providerName)'s output was cut off (finish_reason: length)"))
         }
         guard let content = message["content"] as? String else {
-            throw AnalyzerError.badResponse("\(providerName) 返回里缺少 message.content")
+            throw AnalyzerError.badResponse(L("\(providerName) 返回里缺少 message.content", "\(providerName)'s reply has no message.content"))
         }
         return content
     }
@@ -182,14 +182,15 @@ public struct AnthropicBackend: ChatBackend {
     static func text(from response: [String: Any]) throws -> String {
         switch response["stop_reason"] as? String {
         case "refusal":
-            throw AnalyzerError.refused("Claude 拒绝了这次请求（安全策略）。换一个模型，或改用本地模型分析。")
+            throw AnalyzerError.refused(L("Claude 拒绝了这次请求（安全策略）。换一个模型，或改用本地模型分析。",
+                                          "Claude declined this request (safety policy). Try another model, or analyze with the local model."))
         case "max_tokens":
-            throw AnalyzerError.badResponse("Claude 的输出被截断了（max_tokens）")
+            throw AnalyzerError.badResponse(L("Claude 的输出被截断了（max_tokens）", "Claude's output was cut off (max_tokens)"))
         default: break
         }
         let blocks = response["content"] as? [[String: Any]] ?? []
         let text = blocks.filter { $0["type"] as? String == "text" }.compactMap { $0["text"] as? String }.joined()
-        guard !text.isEmpty else { throw AnalyzerError.badResponse("Claude 返回里没有文本内容") }
+        guard !text.isEmpty else { throw AnalyzerError.badResponse(L("Claude 返回里没有文本内容", "Claude's reply has no text")) }
         return text
     }
 }
@@ -224,7 +225,7 @@ enum HTTP {
                 ?? String(decoding: responseData.prefix(200), as: UTF8.self)
             throw AnalyzerError.http(service: service, status: status, detail: detail)
         }
-        guard let object else { throw AnalyzerError.badResponse("\(service) 返回的不是 JSON 对象") }
+        guard let object else { throw AnalyzerError.badResponse(L("\(service) 返回的不是 JSON 对象", "\(service) didn't return a JSON object")) }
         return object
     }
 }

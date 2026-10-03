@@ -35,6 +35,8 @@ struct PanelView: View {
             Hairline()
             PrivacyFooter(cloud: settings.cloudProviderName)
         }
+        // 切换语言时整个面板重建，所有文字一起换
+        .id(settings.language)
         .frame(minWidth: 340, idealWidth: 372, minHeight: 540)
         .sheet(isPresented: $showSettings) { SettingsView(monitor: monitor, settings: settings) }
         .sheet(item: Binding(get: { memoryContact.map(ContactID.init) }, set: { memoryContact = $0?.name })) { item in
@@ -121,7 +123,7 @@ struct PanelHeader: View {
             }
             .frame(width: 24, height: 24)
             VStack(alignment: .leading, spacing: 1) {
-                Text("情绪透镜").font(.system(size: 13, weight: .semibold))
+                Text(L("情绪透镜", "EmoLens")).font(.system(size: 13, weight: .semibold))
                 HStack(spacing: 4) {
                     PulseDot(color: statusColor, active: monitor.status == .watching)
                         .frame(width: 10, height: 10)
@@ -131,11 +133,11 @@ struct PanelHeader: View {
             Spacer(minLength: 8)
             if !manual {
                 IconButton(symbol: monitor.isRunning ? "pause.fill" : "play.fill",
-                           help: monitor.isRunning ? "暂停" : "开始") {
+                           help: monitor.isRunning ? L("暂停", "Pause") : L("开始", "Start")) {
                     monitor.isRunning ? monitor.pause() : monitor.start()
                 }
             }
-            IconButton(symbol: "slider.horizontal.3", help: "设置", action: openSettings)
+            IconButton(symbol: "slider.horizontal.3", help: L("设置", "Settings"), action: openSettings)
         }
         .padding(.leading, 30)   // 给窗口左上角的关闭按钮留位置
         .padding(.trailing, 12)
@@ -143,9 +145,9 @@ struct PanelHeader: View {
     }
 
     private var statusText: String {
-        if monitor.analyzing { return "正在分析…" }
-        if manual { return "手动模式 · 不截屏" }
-        if monitor.status == .watching, !monitor.windowName.isEmpty { return "正在看 · \(monitor.windowName)" }
+        if monitor.analyzing { return L("正在分析…", "Analyzing…") }
+        if manual { return L("手动模式 · 不截屏", "Manual mode · no screen capture") }
+        if monitor.status == .watching, !monitor.windowName.isEmpty { return L("正在看 · \(monitor.windowName)", "Watching · \(monitor.windowName)") }
         return monitor.status.text
     }
 
@@ -168,8 +170,9 @@ struct RelationshipBar: View {
             ForEach(relationships, id: \.self) { item in
                 let selected = item == selection
                 Button { selection = item } label: {
-                    Text(item)
+                    Text(Vocabulary.display(item, in: Vocabulary.relationships))
                         .font(.system(size: 11.5, weight: selected ? .semibold : .regular))
+                        .lineLimit(1).minimumScaleFactor(0.8)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 5)
                         .foregroundStyle(selected ? Color.primary : Color.secondary)
@@ -182,7 +185,7 @@ struct RelationshipBar: View {
         }
         .padding(3)
         .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.primary.opacity(0.04)))
-        .help("你和 TA 的关系，会影响对潜台词的判断")
+        .help(L("你和 TA 的关系，会影响对潜台词的判断", "How you know them — the same words mean different things in different relationships"))
     }
 }
 
@@ -215,14 +218,14 @@ struct ReportView: View {
                 SuggestionCard(response: suggestedResponse, reply: report.suggestedReply)
             }
             if let suggestion { suggestion }
-            Text("\(report.engine) · \(String(format: "%.1f", report.latencyMs / 1000)) 秒")
+            Text("\(report.engine) · \(String(format: "%.1f", report.latencyMs / 1000))\(L(" 秒", "s"))")
                 .font(.system(size: 10)).foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
 }
 
-/// 对方的原话，做成微信里「对方气泡」的样子。
+/// 对方的原话，做成聊天软件里「对方气泡」的样子。
 struct MessageQuote: View {
     let message: ChatMessage
     let date: Date
@@ -232,7 +235,8 @@ struct MessageQuote: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Text(isLatest ? "TA 刚刚说" : "TA 之前说").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                Text(isLatest ? L("TA 刚刚说", "They just said") : L("TA 之前说", "They said earlier"))
+                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
                 if let sender = message.sender { Text(sender).font(.system(size: 11)).foregroundStyle(.tertiary) }
                 Spacer()
                 if isLatest && analyzing { Spinner(size: 10) }
@@ -241,7 +245,7 @@ struct MessageQuote: View {
             HStack(alignment: .top, spacing: 8) {
                 Circle().fill(Color.primary.opacity(0.10)).frame(width: 26, height: 26)
                     .overlay(Image(systemName: "person.fill").font(.system(size: 11)).foregroundStyle(.secondary))
-                Text(message.text)
+                Text(Placeholder.localized(message.text))
                     .font(.system(size: 13.5))
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
@@ -267,13 +271,13 @@ struct EmotionHero: View {
                 .background(Circle().fill(color.opacity(0.16)))
             VStack(alignment: .leading, spacing: 5) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(report.emotion).font(.system(size: 20, weight: .bold)).foregroundStyle(color)
+                    Text(Vocabulary.display(report.emotion, in: Vocabulary.emotions)).font(.system(size: 20, weight: .bold)).foregroundStyle(color)
                     if let p = report.emotionProbability {
                         Text("\(Int(p * 100))%").font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 0)
                     if let target = report.target, !target.isEmpty {
-                        Text("冲着\(target)")
+                        Text(L("冲着\(target)", Vocabulary.display(target, in: Vocabulary.targets, language: .en)))
                             .font(.system(size: 11, weight: .medium))
                             .padding(.horizontal, 7).padding(.vertical, 2)
                             .background(Capsule().fill(Color.primary.opacity(0.06)))
@@ -302,7 +306,7 @@ struct IntensityMeter: View {
                 }
             }
             .frame(width: 96)
-            Text("强度 · \(Theme.intensityLabel(value))").font(.system(size: 11)).foregroundStyle(.secondary)
+            Text(L("强度 · ", "Intensity · ") + Theme.intensityLabel(value)).font(.system(size: 11)).foregroundStyle(.secondary)
         }
     }
 }
@@ -317,9 +321,9 @@ struct SubtextCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionTitle(symbol: "text.magnifyingglass", title: "潜台词", tint: .purple) {
+            SectionTitle(symbol: "text.magnifyingglass", title: L("潜台词", "Subtext"), tint: .purple) {
                 if mismatched, let consistency {
-                    Text("字面 ≠ 真实 · \(consistency)")
+                    Text(L("字面 ≠ 真实 · ", "Words ≠ meaning · ") + Vocabulary.display(consistency, in: Vocabulary.consistency))
                         .font(.system(size: 10.5, weight: .semibold))
                         .padding(.horizontal, 7).padding(.vertical, 2)
                         .background(Capsule().fill(Color.purple.opacity(0.14)))
@@ -327,9 +331,9 @@ struct SubtextCard: View {
                 }
             }
             if mismatched, let literal, !literal.isEmpty {
-                row(label: "TA 说", text: literal, emphasized: false)
+                row(label: L("TA 说", "Says"), text: literal, emphasized: false)
             }
-            row(label: mismatched ? "TA 想" : "意思是", text: meaning, emphasized: true)
+            row(label: mismatched ? L("TA 想", "Means") : L("意思是", "Means"), text: meaning, emphasized: true)
         }
         .padding(12)
         .card()
@@ -337,7 +341,8 @@ struct SubtextCard: View {
 
     private func row(label: String, text: String, emphasized: Bool) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(label).font(.system(size: 11, weight: .medium)).foregroundStyle(.tertiary).frame(width: 36, alignment: .leading)
+            Text(label).font(.system(size: 11, weight: .medium)).foregroundStyle(.tertiary)
+                .frame(width: AppLanguage.current == .en ? 42 : 36, alignment: .leading)
             Text(text)
                 .font(.system(size: 13, weight: emphasized ? .medium : .regular))
                 .foregroundStyle(emphasized ? .primary : .secondary)
@@ -353,7 +358,7 @@ struct SignalsCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionTitle(symbol: "waveform.path.ecg", title: "关系信号")
+            SectionTitle(symbol: "waveform.path.ecg", title: L("关系信号", "Relationship signals"))
             FlowLayout(spacing: 6) {
                 ForEach(flags, id: \.self) { flag in
                     SignalChip(flag: flag, probability: probabilities[flag.rawValue] ?? 0)
@@ -391,8 +396,10 @@ struct SuggestionCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            SectionTitle(symbol: Theme.responseSymbol(response ?? ""), title: "建议", tint: Theme.reply) {
-                if let response { Text(response).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.reply) }
+            SectionTitle(symbol: Theme.responseSymbol(response ?? ""), title: L("建议", "Suggestion"), tint: Theme.reply) {
+                if let response {
+                    Text(Vocabulary.display(response, in: Vocabulary.responses)).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.reply)
+                }
             }
             if let reply, !reply.isEmpty {
                 HStack(alignment: .bottom, spacing: 8) {
@@ -406,7 +413,7 @@ struct SuggestionCard: View {
                         .background(BubbleShape(tailOnLeft: false).fill(Color(red: 0.62, green: 0.91, blue: 0.47)))
                 }
                 HStack {
-                    Text("可以这样回，按你的习惯改一改").font(.system(size: 10.5)).foregroundStyle(.tertiary)
+                    Text(L("可以这样回，按你的习惯改一改", "You could say this — tweak it to sound like you")).font(.system(size: 10.5)).foregroundStyle(.tertiary)
                     Spacer()
                     CopyButton(text: reply)
                 }
@@ -420,8 +427,8 @@ struct SuggestionCard: View {
 extension ReportView {
     /// 安全优先：有轻生信号时先接住人；涉及钱时先核实身份。
     var suggestedResponse: String? {
-        if selfHarm { return "先接住 TA" }
-        if flags.contains(.asksMoney) { return "先核实身份" }
+        if selfHarm { return L("先接住 TA", "Be there for them first") }
+        if flags.contains(.asksMoney) { return L("先核实身份", "Verify it's them first") }
         return report.bestResponse
     }
 }
@@ -433,8 +440,9 @@ struct MoneyCard: View {
             Image(systemName: "creditcard.trianglebadge.exclamationmark")
                 .font(.system(size: 17)).foregroundStyle(EmotionFlag.asksMoney.tint)
             VStack(alignment: .leading, spacing: 3) {
-                Text("这条消息在要钱或要账号信息").font(.system(size: 13, weight: .semibold))
-                Text("先打电话或当面确认是不是本人。别急着转账，也别发验证码、支付密码和银行卡号。")
+                Text(L("这条消息在要钱或要账号信息", "This message asks for money or account details")).font(.system(size: 13, weight: .semibold))
+                Text(L("先打电话或当面确认是不是本人。别急着转账，也别发验证码、支付密码和银行卡号。",
+                       "Call them or check in person that it's really them. Don't send money yet, and never share codes, PINs or card numbers."))
                     .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -451,11 +459,14 @@ struct ManipulationNote: View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "exclamationmark.shield").font(.system(size: 12)).foregroundStyle(Theme.danger).padding(.top, 1)
             VStack(alignment: .leading, spacing: 3) {
-                Text(recent >= 2 ? "这类施压最近 14 天出现了 \(recent) 次" : "这句话可能带有情感施压（偶尔一次不代表什么）")
+                Text(recent >= 2 ? L("这类施压最近 14 天出现了 \(recent) 次", "This kind of pressure came up \(recent) times in the last 14 days")
+                     : L("这句话可能带有情感施压（偶尔一次不代表什么）", "This may be emotional pressure (once doesn't mean much)"))
                     .font(.system(size: 12, weight: .semibold))
                 Text(recent >= 2
-                     ? "一再让你内疚或妥协不是小事。先照顾好自己的感受，必要时找信任的人聊聊，不必急着让步。"
-                     : "如果只是一时委屈，可以先回应 TA 的情绪；如果 TA 经常这样让你内疚或让步，先照顾好自己，不必急着妥协。")
+                     ? L("一再让你内疚或妥协不是小事。先照顾好自己的感受，必要时找信任的人聊聊，不必急着让步。",
+                         "Being pushed into guilt or giving in again and again is not a small thing. Take care of yourself first, talk to someone you trust if you need to, and don't rush to give in.")
+                     : L("如果只是一时委屈，可以先回应 TA 的情绪；如果 TA 经常这样让你内疚或让步，先照顾好自己，不必急着妥协。",
+                         "If they're just hurt right now, respond to the feeling first. If they often make you feel guilty to get their way, look after yourself — you don't have to give in."))
                     .font(.system(size: 11.5)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -471,18 +482,27 @@ struct SafetyCard: View {
             HStack(spacing: 8) {
                 Image(systemName: "heart.circle.fill").font(.system(size: 20)).foregroundStyle(Theme.danger)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("TA 可能撑得很辛苦").font(.system(size: 14, weight: .semibold))
-                    Text("AI 判断不一定准，请对照原话").font(.system(size: 10.5)).foregroundStyle(.secondary)
+                    Text(L("TA 可能撑得很辛苦", "They may be really struggling")).font(.system(size: 14, weight: .semibold))
+                    Text(L("AI 判断不一定准，请对照原话", "AI can be wrong — check their actual words")).font(.system(size: 10.5)).foregroundStyle(.secondary)
                 }
             }
             VStack(alignment: .leading, spacing: 5) {
-                step("1", "先接住 TA：温和地问一句「你现在安全吗？」")
-                step("2", "陪着 TA，认真听，不急着讲道理")
-                step("3", "如果 TA 提到具体打算、正在伤害自己或突然联系不上，马上联系 TA 身边的人，或拨打 120 / 110")
+                step("1", L("先接住 TA：温和地问一句「你现在安全吗？」", "Reach out first: gently ask, \"Are you safe right now?\""))
+                step("2", L("陪着 TA，认真听，不急着讲道理", "Stay with them and listen — don't rush to give advice"))
+                step("3", L("如果 TA 提到具体打算、正在伤害自己或突然联系不上，马上联系 TA 身边的人，或拨打 120 / 110",
+                            "If they mention a plan, are hurting themselves, or suddenly go silent, contact someone near them right away or call 911 (or your local emergency number)"))
             }
-            HStack(spacing: 8) {
-                Hotline(name: "心理援助热线", number: "12356")
-                Hotline(name: "希望24热线", number: "400-161-9995")
+            if AppLanguage.current == .en {
+                HStack(spacing: 8) {
+                    Hotline(name: "Call or text (US)", number: "988")
+                    Hotline(name: "Crisis Text Line", number: "HOME → 741741")
+                }
+                Text("Outside the US: findahelpline.com").font(.system(size: 10.5)).foregroundStyle(.secondary).textSelection(.enabled)
+            } else {
+                HStack(spacing: 8) {
+                    Hotline(name: "心理援助热线", number: "12356")
+                    Hotline(name: "希望24热线", number: "400-161-9995")
+                }
             }
         }
         .padding(12)
@@ -522,9 +542,9 @@ struct HistoryView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            SectionTitle(symbol: "clock.arrow.circlepath", title: "最近") {
+            SectionTitle(symbol: "clock.arrow.circlepath", title: L("最近", "Recent")) {
                 if selectedID != nil {
-                    Button("回到最新") { selectedID = nil }.buttonStyle(PillButtonStyle())
+                    Button(L("回到最新", "Back to latest")) { selectedID = nil }.buttonStyle(PillButtonStyle())
                 }
             }
             VStack(spacing: 2) {
@@ -546,8 +566,9 @@ struct HistoryRow: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Circle().fill(Theme.color(for: report.emotion)).frame(width: 7, height: 7)
-                Text(report.emotion).font(.system(size: 11.5, weight: .medium)).frame(width: 30, alignment: .leading)
-                Text(report.message.text).font(.system(size: 11.5)).foregroundStyle(.secondary).lineLimit(1)
+                Text(Vocabulary.display(report.emotion, in: Vocabulary.emotions)).font(.system(size: 11.5, weight: .medium))
+                    .lineLimit(1).frame(width: AppLanguage.current == .en ? 78 : 30, alignment: .leading)
+                Text(Placeholder.localized(report.message.text)).font(.system(size: 11.5)).foregroundStyle(.secondary).lineLimit(1)
                 Spacer(minLength: 4)
                 if report.activeFlags().contains(where: \.isSerious) {
                     Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).foregroundStyle(Theme.danger)
@@ -569,36 +590,40 @@ struct Notices: View {
 
     var body: some View {
         if monitor.status == .needsPermission {
-            Notice(symbol: "lock.shield", tint: .orange, title: "需要屏幕录制权限",
-                   text: "在「系统设置 → 隐私与安全性 → 录屏与系统录音」里打开 EmoLens，然后重新打开应用。") {
-                Button("打开系统设置") {
+            Notice(symbol: "lock.shield", tint: .orange, title: L("需要屏幕录制权限", "Screen Recording permission needed"),
+                   text: L("在「系统设置 → 隐私与安全性 → 录屏与系统录音」里打开 EmoLens，然后重新打开应用。",
+                           "Turn on EmoLens in System Settings → Privacy & Security → Screen & System Audio Recording, then reopen the app.")) {
+                Button(L("打开系统设置", "Open System Settings")) {
                     NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
                 }
                 .buttonStyle(PillButtonStyle(tint: .orange))
             }
         } else if case .failed(let message) = monitor.status {
-            Notice(symbol: "exclamationmark.triangle", tint: .orange, title: "截图出错了", text: message) { EmptyView() }
+            Notice(symbol: "exclamationmark.triangle", tint: .orange, title: L("截图出错了", "Screen capture failed"), text: message) { EmptyView() }
         }
         if monitor.startingOllama {
-            Notice(symbol: "hourglass", tint: .blue, title: "正在启动本地模型",
-                   text: "第一次启动 Ollama 要几秒，之后就一直在后台跑了。") { EmptyView() }
+            Notice(symbol: "hourglass", tint: .blue, title: L("正在启动本地模型", "Starting the local model"),
+                   text: L("第一次启动 Ollama 要几秒，之后就一直在后台跑了。", "Ollama takes a few seconds to start the first time; after that it stays running in the background.")) { EmptyView() }
         } else if monitor.ollamaStatus == .missingBinary {
-            Notice(symbol: "shippingbox", tint: .orange, title: "没找到 ollama 命令",
-                   text: "装好 Ollama 就能自动启动本地模型。也可以在设置里换成云端模型——但那样聊天内容会发送给服务商。") {
-                Button("去下载 Ollama") { NSWorkspace.shared.open(URL(string: "https://ollama.com/download")!) }
+            Notice(symbol: "shippingbox", tint: .orange, title: L("没找到 ollama 命令", "ollama isn't installed"),
+                   text: L("装好 Ollama 就能自动启动本地模型。也可以在设置里换成云端模型——但那样聊天内容会发送给服务商。",
+                           "Install Ollama and EmoLens will start the local model for you. You can also switch to a cloud model in Settings — but then your chats are sent to that provider.")) {
+                Button(L("去下载 Ollama", "Download Ollama")) { NSWorkspace.shared.open(URL(string: "https://ollama.com/download")!) }
                     .buttonStyle(PillButtonStyle(tint: .orange))
             }
         } else if case .failed(let message) = monitor.ollamaStatus {
-            Notice(symbol: "exclamationmark.triangle", tint: .orange, title: "本地模型没能启动", text: message) { EmptyView() }
+            Notice(symbol: "exclamationmark.triangle", tint: .orange, title: L("本地模型没能启动", "The local model didn't start"), text: message) { EmptyView() }
         }
         if let seconds = monitor.pendingVoice {
-            Notice(symbol: "waveform", tint: .blue, title: seconds > 0 ? "对方发来一条 \(seconds) 秒的语音" : "对方发来一条语音",
-                   text: "EmoLens 听不到语音内容。在聊天软件里把它转成文字（通常是右键语音 →「转文字」），转好后会自动接着分析。") { EmptyView() }
+            Notice(symbol: "waveform", tint: .blue,
+                   title: seconds > 0 ? L("对方发来一条 \(seconds) 秒的语音", "They sent a \(seconds)-second voice message") : L("对方发来一条语音", "They sent a voice message"),
+                   text: L("EmoLens 听不到语音内容。在聊天软件里把它转成文字（通常是右键语音 →「转文字」），转好后会自动接着分析。",
+                           "EmoLens can't hear audio. Transcribe it in your messaging app (usually right-click the voice message → Convert to Text) and analysis will continue automatically.")) { EmptyView() }
         }
         if let error = monitor.analysisError {
-            Notice(symbol: "bolt.horizontal.circle", tint: .orange, title: "这条消息没分析成功", text: error) {
+            Notice(symbol: "bolt.horizontal.circle", tint: .orange, title: L("这条消息没分析成功", "Couldn't analyze this message"), text: error) {
                 if monitor.canRetry {
-                    Button("重试") { monitor.retry() }.buttonStyle(PillButtonStyle(tint: .orange))
+                    Button(L("重试", "Retry")) { monitor.retry() }.buttonStyle(PillButtonStyle(tint: .orange))
                 }
             }
         }
@@ -643,22 +668,24 @@ struct Onboarding: View {
             }
             .padding(.top, 10)
             VStack(spacing: 4) {
-                Text(monitor.analyzing ? "正在读 TA 的消息…" : "等 TA 发来新消息").font(.system(size: 15, weight: .semibold))
-                Text("打开一个聊天窗口，对方一发消息，这里就会告诉你 TA 的情绪、潜台词和怎么回。")
+                Text(monitor.analyzing ? L("正在读 TA 的消息…", "Reading their message…") : L("等 TA 发来新消息", "Waiting for their next message"))
+                    .font(.system(size: 15, weight: .semibold))
+                Text(L("打开一个聊天窗口，对方一发消息，这里就会告诉你 TA 的情绪、潜台词和怎么回。",
+                       "Open a chat window. As soon as they send something, you'll see how they feel, what they really mean, and how to reply."))
                     .font(.system(size: 12)).foregroundStyle(.secondary).multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
             VStack(spacing: 0) {
-                check("屏幕录制权限", done: monitor.status != .needsPermission && monitor.preview != nil,
-                      hint: monitor.status == .needsPermission ? "未授权" : "检查中")
+                check(L("屏幕录制权限", "Screen Recording permission"), done: monitor.status != .needsPermission && monitor.preview != nil,
+                      hint: monitor.status == .needsPermission ? L("未授权", "Not allowed") : L("检查中", "Checking"))
                 Hairline().padding(.leading, 34)
-                check("找到聊天窗口", done: monitor.windowFound, hint: monitor.windowHint)
+                check(L("找到聊天窗口", "Chat window found"), done: monitor.windowFound, hint: monitor.windowHint)
                 Hairline().padding(.leading, 34)
-                check("框出聊天区域", done: settings.region != CGRect(x: 0, y: 0, width: 1, height: 1),
-                      hint: "建议设置")
+                check(L("框出聊天区域", "Chat area selected"), done: settings.region != CGRect(x: 0, y: 0, width: 1, height: 1),
+                      hint: L("建议设置", "Recommended"))
             }
             .card()
-            Button("打开设置", action: openSettings).buttonStyle(PillButtonStyle(filled: true))
+            Button(L("打开设置", "Open Settings"), action: openSettings).buttonStyle(PillButtonStyle(filled: true))
         }
         .frame(maxWidth: .infinity)
         .padding(.bottom, 6)
@@ -684,10 +711,11 @@ struct PrivacyFooter: View {
         HStack(spacing: 5) {
             if let cloud {
                 Image(systemName: "icloud.and.arrow.up").font(.system(size: 9)).foregroundStyle(.orange)
-                Text("云端分析：消息会发送给 \(cloud) · 结果仅供参考").foregroundStyle(.orange)
+                Text(L("云端分析：消息会发送给 \(cloud) · 结果仅供参考", "Cloud analysis: messages are sent to \(cloud) · for reference only"))
+                    .foregroundStyle(.orange)
             } else {
                 Image(systemName: "lock.fill").font(.system(size: 9))
-                Text("只在本机分析，不上传聊天内容 · 结果仅供参考")
+                Text(L("只在本机分析，不上传聊天内容 · 结果仅供参考", "Analyzed on this Mac only, nothing uploaded · for reference only"))
             }
         }
         .font(.system(size: 10.5))

@@ -1,0 +1,125 @@
+{
+  "type": "object",
+  "properties": {
+    "literal": {
+      "type": "string",
+      "description": "The plain meaning"
+    },
+    "consistency": {
+      "type": "string",
+      "enum": [
+        "sincere",
+        "sarcastic",
+        "playful",
+        "holding back"
+      ]
+    },
+    "real_meaning": {
+      "type": "string",
+      "description": "What they really think, one sentence, grounded in their words"
+    },
+    "emotion": {
+      "type": "string",
+      "enum": [
+        "happy",
+        "calm",
+        "affectionate",
+        "sad",
+        "hurt",
+        "angry",
+        "disappointed",
+        "anxious",
+        "cold",
+        "embarrassed"
+      ]
+    },
+    "intensity": {
+      "type": "integer",
+      "enum": [
+        0,
+        1,
+        2,
+        3
+      ]
+    },
+    "target": {
+      "type": "string",
+      "enum": [
+        "me",
+        "themselves",
+        "someone else",
+        "the situation"
+      ]
+    },
+    "angry_at_me": {
+      "type": "boolean"
+    },
+    "perfunctory": {
+      "type": "boolean"
+    },
+    "needs_comfort": {
+      "type": "boolean"
+    },
+    "testing": {
+      "type": "boolean"
+    },
+    "cold_distance": {
+      "type": "boolean"
+    },
+    "conflict": {
+      "type": "boolean"
+    },
+    "manipulation": {
+      "type": "boolean"
+    },
+    "self_harm": {
+      "type": "boolean"
+    },
+    "asks_money": {
+      "type": "boolean"
+    },
+    "best_response": {
+      "type": "string",
+      "enum": [
+        "comfort",
+        "apologize",
+        "clarify",
+        "give space",
+        "show care",
+        "chat normally",
+        "hold boundary",
+        "verify identity",
+        "get help"
+      ]
+    },
+    "suggested_reply": {
+      "type": "string",
+      "description": "One casual line \"Me\" would send to them"
+    },
+    "memory_note": {
+      "type": "string",
+      "description": "A concrete fact from their message worth remembering long-term (e.g. \"interview next Wednesday\"); empty string if none"
+    }
+  },
+  "required": [
+    "literal",
+    "consistency",
+    "real_meaning",
+    "emotion",
+    "intensity",
+    "target",
+    "angry_at_me",
+    "perfunctory",
+    "needs_comfort",
+    "testing",
+    "cold_distance",
+    "conflict",
+    "manipulation",
+    "self_harm",
+    "asks_money",
+    "best_response",
+    "suggested_reply",
+    "memory_note"
+  ],
+  "additionalProperties": false
+}

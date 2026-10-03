@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'claude/**']
   pull_request:
 
 concurrency:
@@ -23,3 +23,17 @@ jobs:
         run: swift build
       - name: 单元测试
         run: swift test
+      # 用虚构的示例数据把界面画成 PNG（中英文各一套），不截屏、不需要权限；README 和提交材料的截图从这里下载。
+      - name: 渲染界面预览
+        continue-on-error: true
+        run: |
+          swift run EmoLens --render-previews previews/en --language en
+          swift run EmoLens --render-previews previews/zh --language zh
+      - name: 上传界面预览
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: previews
+          path: previews/
+          if-no-files-found: ignore

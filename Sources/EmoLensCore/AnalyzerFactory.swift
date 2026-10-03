@@ -54,8 +54,8 @@ public enum SystemOneSource: Sendable, Equatable {
     /// 界面和结果里显示的名字。
     public var name: String {
         switch self {
-        case .kev: "决策模型 · Kev"
-        case .jev(_, let model, _): "决策模型 · Jev（\(model)）"
+        case .kev: L("决策模型 · Kev", "Decision model · Kev")
+        case .jev(_, let model, _): L("决策模型 · Jev（\(model)）", "Decision model · Jev (\(model))")
         }
     }
 
@@ -66,7 +66,7 @@ public enum SystemOneSource: Sendable, Equatable {
 
     /// 云端服务名；本机 Kev 为 nil。
     public var cloudProvider: String? {
-        if case .jev = self { "TypeSafe（Jev）" } else { nil }
+        if case .jev = self { L("TypeSafe（Jev）", "TypeSafe (Jev)") } else { nil }
     }
 }
 
@@ -78,13 +78,13 @@ public struct OpenAIPreset: Sendable, Identifiable, Equatable {
     public let model: String
     public let supportsJSONSchema: Bool
 
-    public static let all = [
+    public static var all: [OpenAIPreset] { [
         OpenAIPreset(id: "openai", name: "OpenAI", baseURL: "https://api.openai.com/v1", model: "gpt-5.5", supportsJSONSchema: true),
         OpenAIPreset(id: "deepseek", name: "DeepSeek", baseURL: "https://api.deepseek.com", model: "deepseek-chat", supportsJSONSchema: false),
-        OpenAIPreset(id: "qwen", name: "通义千问", baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", model: "qwen-plus", supportsJSONSchema: false),
+        OpenAIPreset(id: "qwen", name: L("通义千问", "Qwen (DashScope)"), baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", model: "qwen-plus", supportsJSONSchema: false),
         OpenAIPreset(id: "openrouter", name: "OpenRouter", baseURL: "https://openrouter.ai/api/v1", model: "", supportsJSONSchema: false),
-        OpenAIPreset(id: "custom", name: "自定义", baseURL: "", model: "", supportsJSONSchema: false),
-    ]
+        OpenAIPreset(id: "custom", name: L("自定义", "Custom"), baseURL: "", model: "", supportsJSONSchema: false),
+    ] }
 
     public static func named(_ id: String) -> OpenAIPreset { all.first { $0.id == id } ?? all[0] }
 }
@@ -95,6 +95,8 @@ public struct AnalyzerConfig: Sendable {
     public var llm: LLMSource = .localDefault
     public var systemOne: SystemOneSource = .localKev
     public var presets: URL = Presets.directory
+    /// 用哪种语言的提示词和问题集（presets/emotion.llm.<语言>.json、emotion.<语言>.json）。
+    public var language: AppLanguage = .current
 
     public init() {}
 
@@ -112,12 +114,12 @@ public struct AnalyzerConfig: Sendable {
     }
 
     private func llmAnalyzer(_ relationship: String?, _ memory: String?) throws -> LLMAnalyzer {
-        let prompt = try LLMPrompt.load(from: presets.appending(path: "emotion.llm.zh.json"))
+        let prompt = try LLMPrompt.load(from: presets.appending(path: "emotion.llm.\(language.rawValue).json"))
         return LLMAnalyzer(backend: llm.backend(), prompt: prompt, relationship: relationship, memory: memory)
     }
 
     private func systemOne(_ relationship: String?, _ memory: String?, only ids: [String]? = nil) throws -> SystemOneAnalyzer {
-        var preset = try SystemOnePreset.load(from: presets.appending(path: "emotion.zh.json"))
+        var preset = try SystemOnePreset.load(from: presets.appending(path: "emotion.\(language.rawValue).json"))
         if let ids { preset = preset.subset(ids) }
         return SystemOneAnalyzer(source: systemOne, preset: preset, relationship: relationship, memory: memory)
     }

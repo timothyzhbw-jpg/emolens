@@ -31,7 +31,8 @@ enum Theme {
     }
 
     static func intensityLabel(_ value: Double) -> String {
-        ["几乎没有", "轻微", "明显", "很强烈"][Int(min(3, max(0, value.rounded())))]
+        let labels = AppLanguage.current == .en ? ["barely", "mild", "clear", "strong"] : ["几乎没有", "轻微", "明显", "很强烈"]
+        return labels[Int(min(3, max(0, value.rounded())))]
     }
 
     static func responseSymbol(_ response: String) -> String {

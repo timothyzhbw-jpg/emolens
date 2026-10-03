@@ -60,7 +60,8 @@ public struct OllamaLauncher: Sendable {
             waited += step
             if await isHealthy(baseURL) { return .started }
         }
-        return .failed("启动了 ollama serve，但 \(timeout.components.seconds) 秒内没有就绪")
+        return .failed(L("启动了 ollama serve，但 \(timeout.components.seconds) 秒内没有就绪",
+                         "Started ollama serve, but it wasn't ready within \(timeout.components.seconds) seconds"))
     }
 
     @Sendable public static func ping(_ baseURL: URL) async -> Bool {

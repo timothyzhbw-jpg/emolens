@@ -12,17 +12,30 @@ public struct LLMPrompt: Codable, Sendable {
     /// 不放进 system：实测放进去以后，纯文字消息的判断也变了（「真给我丢人」的操控 4 次全漏）。
     public var mediaNote: String?
     public var examples: [Example]
+    /// 提示词的语言，决定聊天记录用中文还是英文框架。没写时是中文。
+    public var language: AppLanguage?
+    /// 同目录下 JSON Schema 的文件名；没写时用 emotion.schema.json。
+    public var schemaFile: String?
 
     enum CodingKeys: String, CodingKey {
-        case system, examples, schema
+        case system, examples, schema, language
         case mediaNote = "media_note"
+        case schemaFile = "schema_file"
     }
     /// 输出格式的 JSON Schema 原文（同目录的 emotion.schema.json），云端模型用它做结构化输出。
     public var schema: String?
 
+    public init(system: String, mediaNote: String? = nil, examples: [Example], schema: String? = nil, language: AppLanguage? = nil) {
+        self.system = system
+        self.mediaNote = mediaNote
+        self.examples = examples
+        self.schema = schema
+        self.language = language
+    }
+
     public static func load(from url: URL) throws -> LLMPrompt {
         var prompt = try JSONDecoder().decode(LLMPrompt.self, from: Data(contentsOf: url))
-        let schemaURL = url.deletingLastPathComponent().appending(path: "emotion.schema.json")
+        let schemaURL = url.deletingLastPathComponent().appending(path: prompt.schemaFile ?? "emotion.schema.json")
         prompt.schema = try? String(contentsOf: schemaURL, encoding: .utf8)
         return prompt
     }
@@ -50,7 +63,8 @@ public struct LLMAnalyzer: EmotionAnalyzer {
             turns.append(ChatTurn(role: "user", content: example.chat))
             turns.append(ChatTurn(role: "assistant", content: try Self.encodeInOrder(example.answer)))
         }
-        var content = ChatState.render(context: context, latest: latest, relationship: relationship, memory: memory)
+        var content = ChatState.render(context: context, latest: latest, relationship: relationship, memory: memory,
+                                       language: prompt.language ?? .zh)
         if let note = prompt.mediaNote, !note.isEmpty, (context + [latest]).contains(where: { Self.hasMedia($0.text) }) {
             content += "\n\n" + note
         }
@@ -111,14 +125,18 @@ public struct LLMAnalyzer: EmotionAnalyzer {
         }
         let consistency = canonicalConsistency(json["consistency"] as? String)
         if consistency == "反话" { flags[EmotionFlag.sarcasm.rawValue] = 1 }
+        // 英文提示词让模型输出英文标签，这里统一换回中文规范值；认不出的原样保留。
+        let emotion = json["emotion"] as? String
+        let response = json["best_response"] as? String
+        let target = json["target"] as? String
         return EmotionReport(
             message: message,
-            emotion: (json["emotion"] as? String) ?? "未知",
+            emotion: Vocabulary.canonical(emotion, in: Vocabulary.emotions) ?? emotion ?? "未知",
             intensity: min(3, max(0, number(json["intensity"]) ?? 0)),
             flags: flags,
-            bestResponse: json["best_response"] as? String,
+            bestResponse: Vocabulary.canonical(response, in: Vocabulary.responses) ?? response,
             consistency: consistency,
-            target: json["target"] as? String,
+            target: Vocabulary.canonical(target, in: Vocabulary.targets) ?? target,
             literal: json["literal"] as? String,
             realMeaning: json["real_meaning"] as? String,
             suggestedReply: json["suggested_reply"] as? String,
@@ -132,6 +150,7 @@ public struct LLMAnalyzer: EmotionAnalyzer {
     static func canonicalConsistency(_ raw: String?) -> String? {
         guard let raw else { return nil }
         return ["反话", "撒娇", "没说完", "一致"].first { raw.contains($0) }
+            ?? Vocabulary.canonical(raw, in: Vocabulary.consistency)
     }
 
     static func number(_ value: Any?) -> Double? {

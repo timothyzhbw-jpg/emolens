@@ -1,4 +1,6 @@
 import AppKit
+import Combine
+import EmoLensCore
 import SwiftUI
 
 @main
@@ -7,8 +9,15 @@ enum EmoLensMain {
     static let delegate = AppDelegate()
 
     static func main() {
-        // EmoLens --render-previews <目录>：用示例数据把界面画成 PNG（开发 / README 截图用），不截屏。
         let args = CommandLine.arguments
+        // --language en|zh（或环境变量 EMOLENS_LANGUAGE）：这次运行用哪种语言，优先于设置；命令行工具也认。
+        let override = args.firstIndex(of: "--language").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
+            ?? ProcessInfo.processInfo.environment["EMOLENS_LANGUAGE"]
+        if let language = override.flatMap(AppLanguage.init(rawValue:)) {
+            AppLanguage.current = language
+            AppSettings.launchLanguage = language
+        }
+        // EmoLens --render-previews <目录>：用示例数据把界面画成 PNG（开发 / README 截图用），不截屏。
         if let i = args.firstIndex(of: "--render-previews"), i + 1 < args.count {
             _ = NSApplication.shared
             do {
@@ -60,13 +69,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private lazy var monitor = Monitor(settings: settings)
     private var panel: NSPanel?
     private var statusItem: NSStatusItem?
+    private var languageChange: AnyCancellable?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = Self.makeMenu()
+        // 切换语言后，菜单栏和状态栏菜单跟着换
+        languageChange = settings.$language.dropFirst().receive(on: RunLoop.main).sink { [weak self] _ in
+            MainActor.assumeIsolated {
+                NSApp.mainMenu = Self.makeMenu()
+                self?.statusItem?.menu = self?.makeStatusMenu()
+            }
+        }
         let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 372, height: 700),
                             styleMask: [.titled, .closable, .miniaturizable, .resizable, .utilityWindow],
                             backing: .buffered, defer: false)
-        panel.title = "EmoLens 情绪透镜"
+        panel.title = L("EmoLens 情绪透镜", "EmoLens")
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
         panel.styleMask.insert(.fullSizeContentView)
@@ -114,14 +131,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// 菜单栏图标：面板被关掉或隐藏后，从这里随时叫回来。
     private func setUpStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.image = NSImage(systemSymbolName: "eye.fill", accessibilityDescription: "情绪透镜")
-        let menu = NSMenu()
-        menu.addItem(withTitle: "显示面板", action: #selector(showPanel), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "暂停 / 继续监控", action: #selector(toggleMonitoring), keyEquivalent: "").target = self
-        menu.addItem(.separator())
-        menu.addItem(withTitle: "退出 EmoLens", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        item.menu = menu
+        item.button?.image = NSImage(systemSymbolName: "eye.fill", accessibilityDescription: "EmoLens")
+        item.menu = makeStatusMenu()
         statusItem = item
+    }
+
+    private func makeStatusMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.addItem(withTitle: L("显示面板", "Show Panel"), action: #selector(showPanel), keyEquivalent: "").target = self
+        menu.addItem(withTitle: L("暂停 / 继续监控", "Pause / Resume Watching"), action: #selector(toggleMonitoring), keyEquivalent: "").target = self
+        menu.addItem(.separator())
+        menu.addItem(withTitle: L("退出 EmoLens", "Quit EmoLens"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        return menu
     }
 
     @objc private func toggleMonitoring() {
@@ -157,20 +178,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let main = NSMenu()
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "隐藏 EmoLens", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: L("隐藏 EmoLens", "Hide EmoLens"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "退出 EmoLens", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: L("退出 EmoLens", "Quit EmoLens"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         main.addItem(appItem)
 
         let editItem = NSMenuItem()
-        let edit = NSMenu(title: "编辑")
-        edit.addItem(withTitle: "撤销", action: Selector(("undo:")), keyEquivalent: "z")
+        let edit = NSMenu(title: L("编辑", "Edit"))
+        edit.addItem(withTitle: L("撤销", "Undo"), action: Selector(("undo:")), keyEquivalent: "z")
         edit.addItem(.separator())
-        edit.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        edit.addItem(withTitle: "复制", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        edit.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        edit.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        edit.addItem(withTitle: L("剪切", "Cut"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: L("复制", "Copy"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: L("粘贴", "Paste"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: L("全选", "Select All"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = edit
         main.addItem(editItem)
         return main

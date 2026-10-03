@@ -1,0 +1,105 @@
+{
+  "id": "emotion.en",
+  "name": "Emotion analysis (English)",
+  "language": "en",
+  "description": "Read the emotion and relationship signals behind the other person's latest message and suggest how to respond. Choice criteria are written as \"Short label: explanation\"; the UI shows the part before the colon. Sarcasm isn't asked directly (Kev only answers the second half of two-part questions); instead we ask the observable says_fine and derive sarcasm by rule: says_fine ≥ 0.5 and the emotion isn't happy / affectionate.",
+  "titles": {
+    "emotion": "Main emotion",
+    "intensity": "Intensity",
+    "angry_at_me": "Upset with you",
+    "sarcasm": "Sarcastic / passive-aggressive",
+    "perfunctory": "Brushing you off",
+    "needs_comfort": "Needs comfort",
+    "testing": "Testing you",
+    "cold_distance": "Pulling away",
+    "conflict": "Fight / breakup signal",
+    "manipulation": "Emotional manipulation",
+    "self_harm": "Self-harm risk",
+    "asks_money": "Money or account request",
+    "best_response": "Suggested response",
+    "says_fine": "Said it's fine / whatever"
+  },
+  "questions": {
+    "emotion": {
+      "type": "choice",
+      "instructions": "What is the main emotion in their latest message? Judge it in the context of the conversation.",
+      "criteria": {
+        "joy": "Happy: glad, excited, content, grateful",
+        "calm": "Calm: normal tone, matter-of-fact, no clear emotion",
+        "affection": "Affectionate: sweet, missing you, loving, clingy",
+        "sad": "Sad: heartbroken, down, discouraged, close to tears",
+        "hurt": "Hurt: feels ignored, misunderstood or wronged",
+        "angry": "Angry: furious, annoyed, blaming, lashing out",
+        "disappointed": "Disappointed: let down by me or by how things went",
+        "anxious": "Anxious: worried, nervous, uneasy, scared",
+        "cold": "Cold: curt, distant, can't be bothered",
+        "embarrassed": "Embarrassed: shy, awkward, self-conscious"
+      }
+    },
+    "intensity": {
+      "type": "score",
+      "instructions": "How strong is the emotion in their latest message?",
+      "criteria": [
+        "Barely any emotion",
+        "Mild",
+        "Clear",
+        "Very strong"
+      ]
+    },
+    "angry_at_me": {
+      "type": "noul",
+      "instructions": "Are they angry with me or unhappy with something I did?"
+    },
+    "says_fine": {
+      "type": "noul",
+      "instructions": "Did they say something like \"it's fine\", \"whatever\", \"do what you want\", \"as long as you're happy\", \"you're always right\" — words that claim they don't mind?"
+    },
+    "perfunctory": {
+      "type": "noul",
+      "instructions": "Are they brushing me off, or have they given up arguing? E.g. replying only \"k\", \"sure\", \"fine\", \"whatever you want\" without really agreeing."
+    },
+    "needs_comfort": {
+      "type": "noul",
+      "instructions": "Do they want comfort, care, or company from me?"
+    },
+    "testing": {
+      "type": "noul",
+      "instructions": "Are they testing my attitude, how much I care, or where my limits are?"
+    },
+    "cold_distance": {
+      "type": "noul",
+      "instructions": "Are they being cold, curt, or deliberately keeping their distance from me?"
+    },
+    "conflict": {
+      "type": "noul",
+      "instructions": "Is there a fight escalating, the silent treatment, or a sign they want to break up, cut ties, or end the relationship?"
+    },
+    "manipulation": {
+      "type": "noul",
+      "instructions": "Are they emotionally manipulating me? E.g. putting me down, threatening me, using guilt to make me give in, demanding my passwords, or telling me to cut off other people."
+    },
+    "self_harm": {
+      "type": "noul",
+      "instructions": "Do they show thoughts of hurting themselves, suicide, or not wanting to live?"
+    },
+    "asks_money": {
+      "type": "noul",
+      "instructions": "Is this message asking me for money, a loan, a transfer or payment, or for a card number, verification code, or password?"
+    },
+    "best_response": {
+      "type": "choice",
+      "instructions": "Given their latest message, how should I respond right now?",
+      "criteria": {
+        "empathize": "Comfort them: acknowledge their feelings first, show you understand and care",
+        "apologize": "Apologize sincerely: own what you got wrong, no excuses",
+        "clarify": "Clarify calmly: they misunderstood, explain things gently",
+        "space": "Give them space: don't push, let them cool down",
+        "act": "Show up for them: call, meet up, or do something concrete",
+        "casual": "Chat as usual: no emotional issue, just reply naturally",
+        "boundary": "Hold your boundary: they're overstepping or manipulating, decline kindly but firmly",
+        "verify": "Verify it's them: it involves money or accounts, confirm by phone or in person first",
+        "seek_help": "Get help: it's dangerous, contact people close to them or a crisis line"
+      }
+    }
+  }
+}

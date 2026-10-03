@@ -79,6 +79,22 @@ public enum Placeholder {
     public static let image = "[图片]"
     public static let transcript = "[语音转文字]"
     public static func voice(_ seconds: Int?) -> String { seconds.map { "[语音 \($0)秒]" } ?? "[语音]" }
+
+    /// 消息正文里的占位符一律按中文保存（解析、看图、记忆都按它）；英文界面和英文提示词里换成英文说法。
+    private static let english: [(NSRegularExpression, String)] = [
+        (#"\[表情包：([^\]]*)\]"#, "[sticker: $1]"), (#"\[表情包\]"#, "[sticker]"),
+        (#"\[表情：([^\]]*)\]"#, "[emoji: $1]"), (#"\[表情\]"#, "[emoji]"),
+        (#"\[图片：([^\]]*)\]"#, "[image: $1]"), (#"\[图片\]"#, "[image]"),
+        (#"\[语音转文字\]"#, "[voice-to-text]"), (#"\[语音 (\d+)秒\]"#, "[voice $1s]"), (#"\[语音\]"#, "[voice]"),
+        (#"（引用：([^）]*)）"#, " (replying to: $1)"),
+    ].map { (try! NSRegularExpression(pattern: $0.0), $0.1) }
+
+    public static func localized(_ text: String, _ language: AppLanguage = .current) -> String {
+        guard language == .en, text.contains("[") || text.contains("（引用") else { return text }
+        return english.reduce(text) { text, rule in
+            rule.0.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: rule.1)
+        }
+    }
 }
 
 /// 气泡分类、昵称识别和折行合并的阈值。

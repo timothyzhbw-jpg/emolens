@@ -70,8 +70,9 @@ public struct ContactMemory: Codable, Equatable, Sendable {
         return (emotions.map { ($0.key, $0.value) }, signals)
     }
 
-    /// 给模型看的简短记忆摘要；没有可说的内容时返回 nil。
-    public func promptSummary(now: Date = Date()) -> String? {
+    /// 给模型看的简短记忆摘要；没有可说的内容时返回 nil。language 要和提示词的语言一致。
+    public func promptSummary(now: Date = Date(), language: AppLanguage = .zh) -> String? {
+        if language == .en { return englishSummary(now: now) }
         var lines: [String] = []
         if !notes.isEmpty {
             lines.append("- 我记下的关于 TA 的事：" + notes.suffix(8).map(\.text).joined(separator: "；"))
@@ -82,7 +83,7 @@ public struct ContactMemory: Codable, Equatable, Sendable {
         }
         let repeated = signals.filter { $0.1 >= 2 }
         if !repeated.isEmpty {
-            lines.append("- 反复出现的信号：" + repeated.prefix(3).map { "\($0.0.title) \($0.1) 次" }.joined(separator: "、"))
+            lines.append("- 反复出现的信号：" + repeated.prefix(3).map { "\($0.0.title(in: .zh)) \($0.1) 次" }.joined(separator: "、"))
         }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
@@ -95,6 +96,34 @@ public struct ContactMemory: Codable, Equatable, Sendable {
         guard !lines.isEmpty else { return nil }
         return "关于对方的记忆（来自之前的聊天，仅供参考，以这次的原话为准）：\n" + lines.joined(separator: "\n")
     }
+
+    private func englishSummary(now: Date) -> String? {
+        var lines: [String] = []
+        if !notes.isEmpty {
+            lines.append("- Things I noted about them: " + notes.suffix(8).map(\.text).joined(separator: "; "))
+        }
+        let (emotions, signals) = counts(days: 7, now: now)
+        let english = { (value: String, terms: [Term]) in Vocabulary.english(value, in: terms) ?? value }
+        if !emotions.isEmpty {
+            lines.append("- Their mood over the last 7 days: "
+                + emotions.prefix(4).map { "\(english($0.0, Vocabulary.emotions)) ×\($0.1)" }.joined(separator: ", "))
+        }
+        let repeated = signals.filter { $0.1 >= 2 }
+        if !repeated.isEmpty {
+            lines.append("- Recurring signals: " + repeated.prefix(3).map { "\($0.0.title(in: .en)) ×\($0.1)" }.joined(separator: ", "))
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.dateFormat = "MMM d"
+        let recent = entries.suffix(3).map { entry -> String in
+            let tone = entry.consistency.flatMap { $0 == "一致" ? nil : english($0, Vocabulary.consistency) }.map { ", \($0)" } ?? ""
+            return "\(formatter.string(from: entry.date)) \"\(entry.excerpt)\" → \(english(entry.emotion, Vocabulary.emotions))\(tone)"
+        }
+        if !recent.isEmpty { lines.append("- Last few times: " + recent.joined(separator: "; ")) }
+        guard !lines.isEmpty else { return nil }
+        return "What I remember about them (from earlier chats; background only — go by what they actually said this time):\n"
+            + lines.joined(separator: "\n")
+    }
 }
 
 /// 值得记住的事的关键词兜底：小模型常漏掉夹在撒娇里的日子和计划。
@@ -103,12 +132,27 @@ public enum MemoryHints {
     public static let keywords = ["生日", "纪念日", "过敏", "面试", "考试", "考研", "搬家", "出差", "手术", "住院",
                                   "体检", "入职", "辞职", "离职", "怀孕", "结婚", "毕业", "答辩", "航班", "回国"]
 
+    /// 英文的同类说法（按整词、不分大小写匹配）。
+    public static let englishKeywords = [
+        "birthday", "anniversary", "allergic", "allergy", "interview", "exam", "exams", "finals", "moving out", "moving to",
+        "surgery", "hospital", "check-up", "checkup", "new job", "quit my job", "got fired", "laid off", "pregnant",
+        "wedding", "graduation", "graduate", "flight", "funeral", "due date",
+    ]
+
+    private static let englishPattern = try! NSRegularExpression(
+        pattern: "\\b(" + englishKeywords.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|") + ")\\b",
+        options: .caseInsensitive)
+
     /// 消息里有这些词、模型又没给出要记的事时，把这句话（去掉客套尾巴）作为候选。
     public static func suggestion(for text: String) -> String? {
-        guard keywords.contains(where: text.contains) else { return nil }
+        let english = englishPattern.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
+        guard english || keywords.contains(where: text.contains) else { return nil }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: #"^(对了|哦对|话说|顺便说一下)[，,、\s]*"#, with: "", options: .regularExpression)
-        return String(trimmed.prefix(ContactMemory.excerptLength))
+            .replacingOccurrences(of: #"^(?i:(oh,? )?(btw|by the way|also|oh and|anyway))[,:\s]*"#, with: "", options: .regularExpression)
+        // 英文一个词好几个字母，40 个字符太短，放宽到 80
+        let limit = english ? ContactMemory.excerptLength * 2 : ContactMemory.excerptLength
+        return String(trimmed.prefix(limit))
     }
 
     public static func apply(to report: EmotionReport) -> EmotionReport {

@@ -6,16 +6,25 @@ import Foundation
 /// 表情一个一个单独问：实测把整个气泡给 4B 模型看，🙄 会说成「疑惑」、🤦 说成「微笑」；只截表情、放大后就对了。
 public struct VisualDescriber: Sendable {
     public var backend: ChatBackend
+    /// 用哪种语言描述：英文界面下表情名也用英文（「facepalm」），和英文提示词一致。
+    public var language: AppLanguage
 
-    public init(backend: ChatBackend) {
+    public init(backend: ChatBackend, language: AppLanguage = .current) {
         self.backend = backend
+        self.language = language
     }
 
     static let system = "你帮用户看懂微信聊天截图里的表情和图片。只输出一个 JSON 对象，不要解释。"
+    static let englishSystem = "You help the user read emoji and pictures in chat screenshots. Output a single JSON object only, no explanations."
 
     static let emojiQuestion = """
     这是对方在微信里发的一个表情（小图标），已经放大。用 2 到 6 个字说出它是什么表情、表达什么，\
     例如「捂脸」「翻白眼」「笑哭」「微笑」「流泪」「生气」。输出 JSON：{"emoji": "…"}
+    """
+
+    static let englishEmojiQuestion = """
+    This is an emoji (a small icon) the other person sent in a chat, enlarged. In 1 to 4 words, say which emoji it is \
+    and what it expresses, e.g. "facepalm", "eye roll", "laughing crying", "smile", "crying", "angry". Output JSON: {"emoji": "…"}
     """
 
     static func pictureQuestion(sticker: Bool) -> String {
@@ -25,23 +34,31 @@ public struct VisualDescriber: Sendable {
         """
     }
 
+    static func englishPictureQuestion(sticker: Bool) -> String {
+        """
+        The screenshot is \(sticker ? "a sticker" : "a picture") the other person sent. In one sentence of at most 20 words, \
+        describe what it shows, any text on it, and the emotion or attitude it conveys. Output JSON: {"description": "…"}
+        """
+    }
+
     /// 一个表情的名字（放大后的表情截图，PNG）。
     public func name(emoji image: Data) async throws -> String {
-        try await ask(Self.emojiQuestion, image: image, key: "emoji")
+        try await ask(language == .en ? Self.englishEmojiQuestion : Self.emojiQuestion, image: image, key: "emoji")
     }
 
     /// 表情包或图片的一句话描述。
     public func describe(picture image: Data, sticker: Bool) async throws -> String {
-        try await ask(Self.pictureQuestion(sticker: sticker), image: image, key: "description")
+        let question = language == .en ? Self.englishPictureQuestion(sticker: sticker) : Self.pictureQuestion(sticker: sticker)
+        return try await ask(question, image: image, key: "description")
     }
 
     private func ask(_ question: String, image: Data, key: String) async throws -> String {
-        let answer = try await backend.complete(system: Self.system,
+        let answer = try await backend.complete(system: language == .en ? Self.englishSystem : Self.system,
                                                 turns: [ChatTurn(role: "user", content: question, images: [image])], schema: nil)
         guard let json = LLMAnalyzer.parseObject(answer) else { throw AnalyzerError.badResponse(String(answer.prefix(200))) }
         let value = (json[key] as? String) ?? (json[key] as? [String])?.first ?? ""
         let cleaned = Self.clean(value)
-        guard !cleaned.isEmpty else { throw AnalyzerError.badResponse("模型没有给出\(key)") }
+        guard !cleaned.isEmpty else { throw AnalyzerError.badResponse(L("模型没有给出\(key)", "the model gave no \(key)")) }
         return cleaned
     }
 
@@ -106,7 +123,7 @@ public struct VisualDescriber: Sendable {
     /// 去掉方括号（免得和占位符混在一起）、句号和多余空白，限制长度。
     static func clean(_ text: String) -> String {
         let trimmed = text.replacingOccurrences(of: "[", with: "").replacingOccurrences(of: "]", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "。")))
+            .trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "。.")))
         return String(trimmed.prefix(60))
     }
 }

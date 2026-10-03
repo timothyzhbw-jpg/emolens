@@ -3,20 +3,28 @@ import Foundation
 /// System One 问题集（presets/emotion.zh.json）。questions 原样发给服务端。
 public struct SystemOnePreset: @unchecked Sendable {
     public let questions: [String: Any]
+    /// 问题集的语言，决定聊天记录用中文还是英文框架。
+    public var language: AppLanguage = .zh
+
+    public init(questions: [String: Any], language: AppLanguage = .zh) {
+        self.questions = questions
+        self.language = language
+    }
 
     public static func load(from url: URL) throws -> SystemOnePreset {
         let json = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
         guard let questions = json?["questions"] as? [String: Any] else {
-            throw AnalyzerError.badResponse("预设文件缺少 questions")
+            throw AnalyzerError.badResponse(L("预设文件缺少 questions", "the preset file has no questions"))
         }
-        return SystemOnePreset(questions: questions)
+        let language = (json?["language"] as? String).flatMap(AppLanguage.init(rawValue:)) ?? .zh
+        return SystemOnePreset(questions: questions, language: language)
     }
 
-    /// choice 选项的界面标签：描述里「：」之前的部分。
+    /// choice 选项的界面标签：描述里冒号（「：」或英文的「:」）之前的部分。
     func label(question: String, key: String) -> String {
         let criteria = (questions[question] as? [String: Any])?["criteria"] as? [String: String]
         let text = criteria?[key] ?? key
-        return String(text.split(separator: "：", maxSplits: 1).first ?? Substring(text))
+        return text.components(separatedBy: CharacterSet(charactersIn: "：:")).first ?? text
     }
 }
 
@@ -39,7 +47,8 @@ public struct SystemOneAnalyzer: EmotionAnalyzer {
 
     public func analyze(context: [ChatMessage], latest: ChatMessage) async throws -> EmotionReport {
         let body: [String: Any] = [
-            "state": ChatState.render(context: context, latest: latest, relationship: relationship, memory: memory),
+            "state": ChatState.render(context: context, latest: latest, relationship: relationship, memory: memory,
+                                      language: preset.language),
             "model": source.model,
             "questions": preset.questions,
         ]
@@ -51,7 +60,7 @@ public struct SystemOneAnalyzer: EmotionAnalyzer {
                                            service: source.serviceName, timeout: source.apiKey == nil ? 300 : 30)
         let latency = Date().timeIntervalSince(start) * 1000
         guard let answers = response["answers"] as? [String: [String: Any]] else {
-            throw AnalyzerError.badResponse("缺少 answers")
+            throw AnalyzerError.badResponse(L("缺少 answers", "missing answers"))
         }
         return report(answers: answers, message: latest, latencyMs: latency)
     }
@@ -70,13 +79,18 @@ public struct SystemOneAnalyzer: EmotionAnalyzer {
             flags[EmotionFlag.sarcasm.rawValue] = saysFine >= 0.5 && !positive ? saysFine : 0
         }
         let responseKey = answers["best_response"]?["choice"] as? String
+        // 标签按问题集的语言写（「委屈」或「Hurt」），统一换回中文规范值。
+        let emotion = preset.label(question: "emotion", key: emotionKey)
         return EmotionReport(
             message: message,
-            emotion: preset.label(question: "emotion", key: emotionKey),
+            emotion: Vocabulary.canonical(emotion, in: Vocabulary.emotions) ?? Vocabulary.canonical(emotionKey, in: Vocabulary.emotions) ?? emotion,
             emotionProbability: probabilities?[emotionKey],
             intensity: (answers["intensity"]?["score"] as? NSNumber)?.doubleValue ?? 0,
             flags: flags,
-            bestResponse: responseKey.map { preset.label(question: "best_response", key: $0) },
+            bestResponse: responseKey.map { key in
+                let label = preset.label(question: "best_response", key: key)
+                return Vocabulary.canonical(label, in: Vocabulary.responses) ?? Vocabulary.canonical(key, in: Vocabulary.responses) ?? label
+            },
             engine: name,
             latencyMs: latencyMs
         )
@@ -86,7 +100,7 @@ public struct SystemOneAnalyzer: EmotionAnalyzer {
 extension SystemOnePreset {
     /// 只保留部分问题，例如双引擎模式里只让决策模型判严重信号。
     public func subset(_ ids: [String]) -> SystemOnePreset {
-        SystemOnePreset(questions: questions.filter { ids.contains($0.key) })
+        SystemOnePreset(questions: questions.filter { ids.contains($0.key) }, language: language)
     }
 }
 
@@ -114,7 +128,7 @@ public struct CombinedAnalyzer: EmotionAnalyzer {
         }
         var report = try await main
         guard let extra = await check else {
-            report.engine = "\(primary.name)（\(checker.name) 未响应）"
+            report.engine = L("\(primary.name)（\(checker.name) 未响应）", "\(primary.name) (\(checker.name) didn't respond)")
             return report
         }
         for flag in Self.seriousFlags {

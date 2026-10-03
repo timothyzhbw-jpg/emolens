@@ -65,18 +65,20 @@ public enum EmotionFlag: String, CaseIterable, Sendable {
     case selfHarm = "self_harm"
     case asksMoney = "asks_money"
 
-    public var title: String {
+    public var title: String { title(in: .current) }
+
+    public func title(in language: AppLanguage) -> String {
         switch self {
-        case .angryAtMe: "在生我的气"
-        case .sarcasm: "反话 / 阴阳怪气"
-        case .perfunctory: "敷衍 / 不想争了"
-        case .needsComfort: "需要安慰"
-        case .testing: "在试探我"
-        case .coldDistance: "冷淡疏远"
-        case .conflict: "冷战 / 分手信号"
-        case .manipulation: "情感操控"
-        case .selfHarm: "自伤风险"
-        case .asksMoney: "涉及钱或账号"
+        case .angryAtMe: language.pick("在生我的气", "Upset with you")
+        case .sarcasm: language.pick("反话 / 阴阳怪气", "Sarcastic / passive-aggressive")
+        case .perfunctory: language.pick("敷衍 / 不想争了", "Brushing you off")
+        case .needsComfort: language.pick("需要安慰", "Needs comfort")
+        case .testing: language.pick("在试探我", "Testing you")
+        case .coldDistance: language.pick("冷淡疏远", "Pulling away")
+        case .conflict: language.pick("冷战 / 分手信号", "Fight / breakup signal")
+        case .manipulation: language.pick("情感操控", "Emotional manipulation")
+        case .selfHarm: language.pick("自伤风险", "Self-harm risk")
+        case .asksMoney: language.pick("涉及钱或账号", "Money or account request")
         }
     }
 
@@ -97,7 +99,7 @@ public enum AnalyzerError: LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .badResponse(let detail): "分析引擎返回了无法识别的结果：\(detail)"
+        case .badResponse(let detail): L("分析引擎返回了无法识别的结果：\(detail)", "The analysis engine returned something unreadable: \(detail)")
         case .refused(let detail): detail
         case .http(let service, let status, let detail): Self.describe(service: service, status: status, detail: detail)
         }
@@ -106,34 +108,54 @@ public enum AnalyzerError: LocalizedError {
     /// 把常见状态码翻成用户知道怎么办的话。
     static func describe(service: String, status: Int, detail: String) -> String {
         switch status {
-        case 401: "\(service) 的 API Key 无效或没填，请在设置里检查。"
-        case 402: "\(service) 账户余额不足或未开通付费。"
-        case 403: "这个 API Key 没有权限使用该模型。（\(detail)）"
-        case 404: "\(service) 找不到这个模型或地址，请检查模型名和服务地址。（\(detail)）"
-        case 429: "\(service) 请求太频繁或额度用完了，稍后再试。"
-        case 500, 502, 503, 529: "\(service) 服务暂时繁忙（HTTP \(status)），稍后再试。"
-        default: "\(service) 返回错误（HTTP \(status)）：\(detail)"
+        case 401: L("\(service) 的 API Key 无效或没填，请在设置里检查。", "The \(service) API key is missing or invalid. Check it in Settings.")
+        case 402: L("\(service) 账户余额不足或未开通付费。", "Your \(service) account is out of credit or billing isn't set up.")
+        case 403: L("这个 API Key 没有权限使用该模型。（\(detail)）", "This API key can't use that model. (\(detail))")
+        case 404: L("\(service) 找不到这个模型或地址，请检查模型名和服务地址。（\(detail)）",
+                    "\(service) can't find that model or URL. Check the model name and endpoint. (\(detail))")
+        case 429: L("\(service) 请求太频繁或额度用完了，稍后再试。", "\(service) is rate-limiting you or your quota ran out. Try again shortly.")
+        case 500, 502, 503, 529: L("\(service) 服务暂时繁忙（HTTP \(status)），稍后再试。", "\(service) is busy right now (HTTP \(status)). Try again shortly.")
+        default: L("\(service) 返回错误（HTTP \(status)）：\(detail)", "\(service) returned an error (HTTP \(status)): \(detail)")
         }
     }
 }
 
-/// 把聊天记录渲染成给模型看的文本。
+/// 把聊天记录渲染成给模型看的文本。language 跟着提示词走：英文提示词配英文的聊天记录框架。
 public enum ChatState {
-    public static func line(_ message: ChatMessage) -> String {
+    public static func line(_ message: ChatMessage, language: AppLanguage = .zh) -> String {
+        guard language == .en else {
+            switch message.speaker {
+            case .me: return "我：\(message.text)"
+            case .them: return message.sender.map { "对方（\($0)）：\(message.text)" } ?? "对方：\(message.text)"
+            case .system: return "［\(message.text)］"
+            }
+        }
+        let text = Placeholder.localized(message.text, .en)
         switch message.speaker {
-        case .me: "我：\(message.text)"
-        case .them: message.sender.map { "对方（\($0)）：\(message.text)" } ?? "对方：\(message.text)"
-        case .system: "［\(message.text)］"
+        case .me: return "Me: \(text)"
+        case .them: return message.sender.map { "Them (\($0)): \(text)" } ?? "Them: \(text)"
+        case .system: return "[\(text)]"
         }
     }
 
-    /// relationship 为「恋人」「家人」等；nil 或「不确定」时不写。memory 为联系人记忆摘要。
-    public static func render(context: [ChatMessage], latest: ChatMessage, relationship: String? = nil, memory: String? = nil) -> String {
+    /// relationship 为「恋人」「家人」等规范值（英文写法也认）；nil 或「不确定」时不写。memory 为联系人记忆摘要。
+    public static func render(context: [ChatMessage], latest: ChatMessage, relationship: String? = nil, memory: String? = nil,
+                              language: AppLanguage = .zh) -> String {
+        let relation = Vocabulary.canonical(relationship, in: Vocabulary.relationships) ?? relationship
+        let known = relation.map { !$0.isEmpty && $0 != "不确定" } ?? false
         var text = ""
-        if let relationship, !relationship.isEmpty, relationship != "不确定" { text += "双方关系：\(relationship)\n" }
+        if language == .en {
+            if known, let relation { text += "Relationship: \(Vocabulary.english(relation, in: Vocabulary.relationships) ?? relation)\n" }
+            if let memory, !memory.isEmpty { text += memory + "\n\n" }
+            text += "Chat log (oldest first; \"Me\" is the user, \"Them\" is the other person):\n"
+            text += context.map { line($0, language: .en) }.joined(separator: "\n")
+            text += "\n\nAnalyze only their latest message:\n" + line(latest, language: .en)
+            return text
+        }
+        if known, let relation { text += "双方关系：\(relation)\n" }
         if let memory, !memory.isEmpty { text += memory + "\n\n" }
         text += "以下是微信聊天记录（按时间顺序，「我」是用户，「对方」是聊天对象）：\n"
-        text += context.map(line).joined(separator: "\n")
+        text += context.map { line($0) }.joined(separator: "\n")
         text += "\n\n需要分析的是对方最新这条：\n" + line(latest)
         return text
     }

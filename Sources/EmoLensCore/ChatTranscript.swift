@@ -1,11 +1,13 @@
 import Foundation
 
-/// 把手动粘贴的聊天记录解析成消息列表。微信复制出来的格式有好几种，这里都尽量认：
+/// 把手动粘贴的聊天记录解析成消息列表。聊天软件复制出来的格式有好几种，这里都尽量认：
 ///
 ///     小美：你在干嘛           // 名字：内容
 ///     我: 在忙                // 半角冒号也行
 ///     小美 2026-09-22 12:30   // 名字 + 时间单独一行，内容在下一行
 ///     在干嘛呀
+///     [10/3/26, 3:05 PM] Amy: hey      // 行首带时间戳的导出格式
+///     Amy — Today at 3:05 PM           // 英文的「名字 + 时间」行
 ///
 /// 认不出说话人的行，算作上一条消息的下一行（长消息会折行）。
 public enum ChatTranscript {
@@ -15,12 +17,19 @@ public enum ChatTranscript {
         public var names: [String]
     }
 
-    public static let defaultMyNames: Set<String> = ["我", "自己", "本人", "me", "i"]
+    public static let defaultMyNames: Set<String> = ["我", "自己", "本人", "me", "i", "you", "myself"]
 
     /// 名字 + 时间戳单独一行：「小美 2026-09-22 12:30:15」「小美 下午 3:05」。
-    private static let header = regex(#"^(.{1,20}?)\s+(?:\d{4}[-年]\d{1,2}[-月]\d{1,2}日?\s+)?(?:上午|下午|凌晨|晚上)?\s*\d{1,2}:\d{2}(?::\d{2})?$"#)
-    /// 「名字：内容」。名字里不能有冒号或斜杠，免得把网址当成说话人。
-    private static let prefixed = regex(#"^([^：:/\\]{1,20})[：:]\s*(.+)$"#)
+    private static let header = regex(#"^(\S{1,20}?)\s+(?:\d{4}[-年]\d{1,2}[-月]\d{1,2}日?\s+)?(?:上午|下午|凌晨|晚上)?\s*\d{1,2}:\d{2}(?::\d{2})?$"#)
+    /// 英文聊天软件复制出来的「名字 + 时间」行：「Alice — Today at 3:05 PM」「Alice, [10/3/2026 3:05 PM]」「Alice 3:05 PM」。
+    /// 名字最多三个词、每个词大写开头，免得把「meet me at 3:05 PM」当成说话人。
+    private static let englishHeader = regex(#"^((?:\p{Lu}[\p{L}'’.\-]*)(?:\s\p{Lu}[\p{L}'’.\-]*){0,2})\s*(?:,|—|–|-)?\s*\[?(?:(?:Today|Yesterday)(?:\s+at)?\s+|\d{1,2}/\d{1,2}/\d{2,4},?\s+)?\d{1,2}:\d{2}(?::\d{2})?\s?(?:[AaPp]\.?[Mm]\.?)?\]?$"#)
+    /// WhatsApp 这类导出格式的行首时间戳：「[10/3/26, 3:05:12 PM] 」「10/3/26, 3:05 PM - 」，去掉后剩「名字: 内容」。
+    private static let leadingStamp = regex(#"^\[?\d{1,4}[/.\-]\d{1,2}[/.\-]\d{1,4},?\s+\d{1,2}:\d{2}(?::\d{2})?\s?(?:[AaPp]\.?[Mm]\.?)?\]?\s*(?:-\s+)?"#)
+    /// 英文的日期、时间分隔和「已送达 / 已读」状态行，跳过。
+    private static let englishTimeOnly = regex(#"^(?i:(?:(?:Today|Yesterday|Mon(?:day)?|Tue(?:s|sday)?|Wed(?:nesday)?|Thu(?:rs|rsday)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?),?\s*)?(?:(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t|tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2}(?:,\s*\d{4})?,?\s*)?(?:\d{1,2}/\d{1,2}/\d{2,4},?\s*)?(?:(?:at\s+)?\d{1,2}:\d{2}(?::\d{2})?\s?(?:[ap]\.?m\.?)?)?|(?:Delivered|Seen|Read|Sent)(?:\s+(?:at\s+)?\d{1,2}:\d{2}\s?(?:[ap]m)?)?)$"#)
+    /// 「名字：内容」。名字里不能有冒号或斜杠，免得把网址当成说话人；冒号前不能是数字，免得把「3:05」拆开。
+    private static let prefixed = regex(#"^([^：:/\\]{1,20})(?<![0-9])[：:]\s*(.+)$"#)
     /// 只有日期或时间的行（微信里的时间分隔），跳过。
     private static let timeOnly = regex(#"^(?:昨天|今天|前天|星期[一二三四五六日天]|周[一二三四五六日天]|(?:\d{4}年)?\d{1,2}月\d{1,2}日)?\s*(?:上午|下午|凌晨|晚上)?\s*(?:\d{1,2}:\d{2}(?::\d{2})?)?$"#)
 
@@ -29,13 +38,15 @@ public enum ChatTranscript {
         var pendingName: String?
 
         for rawLine in text.split(whereSeparator: \.isNewline) {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            var line = rawLine.trimmingCharacters(in: .whitespaces)
+            line = leadingStamp.stringByReplacingMatches(in: line, range: NSRange(line.startIndex..., in: line), withTemplate: "")
             guard !line.isEmpty else { continue }
-            if let groups = capture(header, line) {
+            // 先跳过纯时间行：「昨天 21:05」「Today 3:05 PM」不能被当成「名字 + 时间」
+            if capture(timeOnly, line) != nil || capture(englishTimeOnly, line) != nil { continue }
+            if let groups = capture(header, line) ?? capture(englishHeader, line) {
                 pendingName = groups[0]
                 continue
             }
-            if capture(timeOnly, line) != nil { continue }
             // 「https://…」里的冒号不是说话人，冒号后面紧跟 // 就当普通内容
             if let groups = capture(prefixed, line), !groups[1].hasPrefix("//") {
                 collected.append((groups[0], groups[1]))

@@ -1,4 +1,5 @@
 import AppKit
+import EmoLensCore
 import SwiftUI
 
 /// 圆形图标按钮，悬停时显示底色。
@@ -153,7 +154,7 @@ struct CopyButton: View {
             withAnimation(.easeOut(duration: 0.15)) { copied = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { withAnimation { copied = false } }
         } label: {
-            Label(copied ? "已复制" : "复制", systemImage: copied ? "checkmark" : "doc.on.doc")
+            Label(copied ? L("已复制", "Copied") : L("复制", "Copy"), systemImage: copied ? "checkmark" : "doc.on.doc")
         }
         .buttonStyle(PillButtonStyle(tint: tint, filled: copied))
     }

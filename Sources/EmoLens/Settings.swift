@@ -9,17 +9,17 @@ extension Engine: Identifiable {
 
     var name: String {
         switch self {
-        case .llm: "大模型"
-        case .combined: "双引擎"
-        case .systemOne: "决策模型"
+        case .llm: L("大模型", "Language model")
+        case .combined: L("双引擎", "Dual engine")
+        case .systemOne: L("决策模型", "Decision model")
         }
     }
 
     var detail: String {
         switch self {
-        case .llm: "读潜台词、给回复建议（推荐）"
-        case .combined: "大模型 + 决策模型（Kev 或 Jev）复核严重信号，更稳"
-        case .systemOne: "Kev / Jev · 校准概率，读不懂潜台词，没有回复建议"
+        case .llm: L("读潜台词、给回复建议（推荐）", "Reads subtext and suggests a reply (recommended)")
+        case .combined: L("大模型 + 决策模型（Kev 或 Jev）复核严重信号，更稳", "Language model + decision model (Kev or Jev) double-checks serious signals")
+        case .systemOne: L("Kev / Jev · 校准概率，读不懂潜台词，没有回复建议", "Kev / Jev · calibrated probabilities, no subtext, no reply suggestion")
         }
     }
 }
@@ -32,8 +32,8 @@ enum LLMProvider: String, CaseIterable, Identifiable {
 
     var name: String {
         switch self {
-        case .ollama: "本地 Ollama"
-        case .openai: "OpenAI 兼容"
+        case .ollama: L("本地 Ollama", "Local Ollama")
+        case .openai: L("OpenAI 兼容", "OpenAI-compatible")
         case .anthropic: "Anthropic Claude"
         }
     }
@@ -47,20 +47,29 @@ enum SystemOneProvider: String, CaseIterable, Identifiable {
 
     var name: String {
         switch self {
-        case .kev: "本机 Kev"
-        case .jev: "Jev（TypeSafe 云端）"
+        case .kev: L("本机 Kev", "Kev on this Mac")
+        case .jev: L("Jev（TypeSafe 云端）", "Jev (TypeSafe cloud)")
         }
     }
 }
 
-/// 聊天对象和我的关系，会写进给模型的上下文。
+/// 聊天对象和我的关系，会写进给模型的上下文。保存的是中文规范值，显示时按语言翻译。
 let relationships = ["不确定", "恋人", "家人", "朋友", "同事", "同学"]
 
 /// 用户设置，存在 UserDefaults。
 @MainActor
 final class AppSettings: ObservableObject {
     private let defaults = UserDefaults.standard
+    /// 命令行 --language 指定的语言，优先于保存的设置（只影响这次运行，不改设置）。
+    static var launchLanguage: AppLanguage?
 
+    /// 界面和分析的语言；没设置过时跟随系统语言。
+    @Published var language: AppLanguage {
+        didSet {
+            defaults.set(language.rawValue, forKey: "language")
+            AppLanguage.current = language
+        }
+    }
     @Published var engine: EngineKind { didSet { defaults.set(engine.rawValue, forKey: "engine") } }
     @Published var ollamaURL: String { didSet { defaults.set(ollamaURL, forKey: "ollamaURL") } }
     @Published var ollamaModel: String { didSet { defaults.set(ollamaModel, forKey: "ollamaModel") } }
@@ -94,6 +103,9 @@ final class AppSettings: ObservableObject {
     }
 
     init() {
+        let language = Self.launchLanguage ?? AppLanguage(rawValue: UserDefaults.standard.string(forKey: "language") ?? "") ?? .system
+        self.language = language
+        AppLanguage.current = language
         engine = EngineKind(rawValue: defaults.string(forKey: "engine") ?? "") ?? .llm
         ollamaURL = defaults.string(forKey: "ollamaURL") ?? "http://127.0.0.1:11434"
         ollamaModel = defaults.string(forKey: "ollamaModel") ?? "qwen3.5:4b"
@@ -134,8 +146,8 @@ final class AppSettings: ObservableObject {
     /// 所有会收到聊天内容的云端服务（大模型和 Jev），全在本机时为 nil。界面据此提示消息会不会发出去。
     var cloudProviderName: String? {
         let names = [engine != .systemOne ? llmCloudName : nil,
-                     engine != .llm && systemOneProvider == .jev ? "TypeSafe（Jev）" : nil].compactMap { $0 }
-        return names.isEmpty ? nil : names.joined(separator: "、")
+                     engine != .llm && systemOneProvider == .jev ? L("TypeSafe（Jev）", "TypeSafe (Jev)") : nil].compactMap { $0 }
+        return names.isEmpty ? nil : names.joined(separator: L("、", ", "))
     }
 
     /// 大模型的云端服务名；本地 Ollama 为 nil。
@@ -144,7 +156,7 @@ final class AppSettings: ObservableObject {
         case .ollama: return nil
         case .openai:
             let preset = OpenAIPreset.named(openAIPreset)
-            return preset.id == "custom" ? (URL(string: openAIBaseURL)?.host() ?? "云端服务") : preset.name
+            return preset.id == "custom" ? (URL(string: openAIBaseURL)?.host() ?? L("云端服务", "cloud service")) : preset.name
         case .anthropic: return "Anthropic"
         }
     }
@@ -153,12 +165,16 @@ final class AppSettings: ObservableObject {
     func analyzerConfig() throws -> AnalyzerConfig {
         var config = AnalyzerConfig()
         config.engine = engine
+        config.language = language
         if engine != .llm {
             switch systemOneProvider {
             case .kev:
                 config.systemOne = .kev(baseURL: try url(systemOneURL))
             case .jev:
-                guard !jevKey.isEmpty else { throw AnalyzerError.badResponse("还没填 Jev 的 API Key：设置 → 分析引擎 → 决策模型来源") }
+                guard !jevKey.isEmpty else {
+                    throw AnalyzerError.badResponse(L("还没填 Jev 的 API Key：设置 → 分析引擎 → 决策模型来源",
+                                                      "No Jev API key yet: Settings → Analysis engine → Decision model source"))
+                }
                 config.systemOne = .jev(baseURL: try url(jevURL), model: jevModel.isEmpty ? SystemOneSource.jevModel : jevModel,
                                         apiKey: jevKey)
             }
@@ -169,14 +185,19 @@ final class AppSettings: ObservableObject {
         case .ollama:
             config.llm = .ollama(baseURL: try url(ollamaURL), model: ollamaModel)
         case .openai:
-            guard !openAIKey.isEmpty else { throw AnalyzerError.badResponse("还没填 API Key：设置 → 分析引擎 → OpenAI 兼容") }
-            guard !openAIModel.isEmpty else { throw AnalyzerError.badResponse("还没填模型名") }
+            guard !openAIKey.isEmpty else {
+                throw AnalyzerError.badResponse(L("还没填 API Key：设置 → 分析引擎 → OpenAI 兼容", "No API key yet: Settings → Analysis engine → OpenAI-compatible"))
+            }
+            guard !openAIModel.isEmpty else { throw AnalyzerError.badResponse(L("还没填模型名", "No model name yet")) }
             let preset = OpenAIPreset.named(openAIPreset)
             config.llm = .openAICompatible(baseURL: try url(openAIBaseURL), model: openAIModel, apiKey: openAIKey,
                                            supportsJSONSchema: preset.supportsJSONSchema,
                                            providerName: llmCloudName ?? preset.name)
         case .anthropic:
-            guard !anthropicKey.isEmpty else { throw AnalyzerError.badResponse("还没填 Claude 的 API Key：设置 → 分析引擎 → Anthropic Claude") }
+            guard !anthropicKey.isEmpty else {
+                throw AnalyzerError.badResponse(L("还没填 Claude 的 API Key：设置 → 分析引擎 → Anthropic Claude",
+                                                  "No Claude API key yet: Settings → Analysis engine → Anthropic Claude"))
+            }
             config.llm = .anthropic(model: anthropicModel, apiKey: anthropicKey)
         }
         return config
@@ -185,7 +206,7 @@ final class AppSettings: ObservableObject {
 
     private func url(_ text: String) throws -> URL {
         guard let url = URL(string: text.trimmingCharacters(in: .whitespaces)), url.host() != nil else {
-            throw AnalyzerError.badResponse("地址格式不对：\(text)")
+            throw AnalyzerError.badResponse(L("地址格式不对：\(text)", "That URL doesn't look right: \(text)"))
         }
         return url
     }

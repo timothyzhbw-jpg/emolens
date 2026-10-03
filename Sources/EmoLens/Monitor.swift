@@ -15,11 +15,12 @@ final class Monitor: ObservableObject {
 
         var text: String {
             switch self {
-            case .paused: "已暂停"
-            case .watching: "正在看聊天窗口"
-            case .noWindow(let chosen): chosen ? "选定的窗口不见了，请在设置里重新选" : "没找到聊天窗口：先打开聊天软件，或在设置里选一个窗口"
-            case .windowHidden(let name): "\(name) 被最小化了，点程序坞把它恢复"
-            case .needsPermission: "需要屏幕录制权限"
+            case .paused: L("已暂停", "Paused")
+            case .watching: L("正在看聊天窗口", "Watching the chat window")
+            case .noWindow(let chosen): chosen ? L("选定的窗口不见了，请在设置里重新选", "The chosen window is gone — pick it again in Settings")
+                : L("没找到聊天窗口：先打开聊天软件，或在设置里选一个窗口", "No chat window found: open your messaging app, or pick a window in Settings")
+            case .windowHidden(let name): L("\(name) 被最小化了，点程序坞把它恢复", "\(name) is minimized — click it in the Dock to bring it back")
+            case .needsPermission: L("需要屏幕录制权限", "Screen Recording permission needed")
             case .failed(let message): message
             }
         }
@@ -136,9 +137,9 @@ final class Monitor: ObservableObject {
 
     var windowHint: String {
         switch status {
-        case .noWindow: "没找到"
-        case .windowHidden: "被最小化了"
-        default: "查找中"
+        case .noWindow: L("没找到", "Not found")
+        case .windowHidden: L("被最小化了", "Minimized")
+        default: L("查找中", "Looking…")
         }
     }
     var canRetry: Bool { failed != nil && !analyzing }
@@ -184,7 +185,7 @@ final class Monitor: ObservableObject {
 
     /// 预览渲染用：直接设定界面状态，不截图也不分析。
     func loadPreview(status: Status, reports: [EmotionReport], analyzing: Bool = false,
-                     windowName: String = "聊天窗口", error: String? = nil, preview: CGImage? = nil, pendingVoice: Int? = nil) {
+                     windowName: String = L("聊天窗口", "Chat window"), error: String? = nil, preview: CGImage? = nil, pendingVoice: Int? = nil) {
         self.pendingVoice = pendingVoice
         self.status = status
         self.reports = reports
@@ -355,7 +356,7 @@ final class Monitor: ObservableObject {
             guard let url = URL(string: settings.ollamaURL), await OllamaLauncher.ping(url),
                   let analyzer = try? settings.analyzerConfig().makeAnalyzer(engine: .llm, relationship: settings.relationship) else { return }
             let start = Date()
-            _ = try? await analyzer.analyze(context: [], latest: ChatMessage(speaker: .them, text: "嗯", top: 0))
+            _ = try? await analyzer.analyze(context: [], latest: ChatMessage(speaker: .them, text: L("嗯", "ok"), top: 0))
             log.notice("warm-up done in \(Int(Date().timeIntervalSince(start) * 1000)) ms")
         }
     }
@@ -369,7 +370,7 @@ final class Monitor: ObservableObject {
             await ensureLocalModel()
             do {
                 let contactMemory = job.contact.map(memory.memory(for:))
-                let summary = settings.useMemory ? contactMemory?.promptSummary() : nil
+                let summary = settings.useMemory ? contactMemory?.promptSummary(language: settings.language) : nil
                 let analyzer = try settings.analyzerConfig().makeAnalyzer(relationship: relationship(for: job.contact), memory: summary)
                 let latest = await describeImage(job)
                 let analyzed = try await analyzer.analyze(context: job.context, latest: latest)
@@ -410,9 +411,14 @@ final class Monitor: ObservableObject {
         }
         let start = Date()
         do {
-            let (message, learned) = try await VisualDescriber(backend: backend).read(job.latest, images: images, known: descriptions)
+            // 缓存按语言分开：切到英文后不该再用中文的表情名
+            let prefix = settings.language.rawValue + ":"
+            let known = descriptions.filter { $0.key.hasPrefix(prefix) }
+                .reduce(into: [String: String]()) { $0[String($1.key.dropFirst(prefix.count))] = $1.value }
+            let (message, learned) = try await VisualDescriber(backend: backend, language: settings.language)
+                .read(job.latest, images: images, known: known)
             if descriptions.count > 200 { descriptions.removeAll() }
-            descriptions.merge(learned) { $1 }
+            for (key, value) in learned { descriptions[prefix + key] = value }
             log.notice("read \(images.count) image(s) of \(job.latest.attachment?.kind.rawValue ?? "", privacy: .public) in \(Int(Date().timeIntervalSince(start) * 1000)) ms (\(images.count - learned.count) cached)")
             return message
         } catch AnalyzerError.http(_, let status, _) where status == 400 || status == 404 || status == 422 {
@@ -447,14 +453,17 @@ final class Monitor: ObservableObject {
     /// 把常见的网络错误翻成用户看得懂、知道怎么办的话。
     private func describe(_ error: Error) -> String {
         let engine = settings.engine
-        let decision = settings.systemOneProvider == .jev ? "Jev 的 API Key 和网络" : "Kev 服务在运行"
-        let fix = engine == .systemOne ? "请确认\(decision)。"
-            : engine == .combined ? "请确认 Ollama（ollama serve）在运行，以及\(decision)。" : "请先在终端运行 ollama serve。"
+        let decision = settings.systemOneProvider == .jev ? L("Jev 的 API Key 和网络", "your Jev API key and network")
+            : L("Kev 服务在运行", "the Kev server is running")
+        let fix = engine == .systemOne ? L("请确认\(decision)。", "Check \(decision).")
+            : engine == .combined ? L("请确认 Ollama（ollama serve）在运行，以及\(decision)。", "Make sure Ollama (ollama serve) is running, and check \(decision).")
+            : L("请先在终端运行 ollama serve。", "Run ollama serve in Terminal first.")
         switch (error as? URLError)?.code {
         case .cannotConnectToHost?, .cannotFindHost?, .networkConnectionLost?, .notConnectedToInternet?:
-            return "连不上分析引擎（\(engine.name)）。" + fix
+            return L("连不上分析引擎（\(engine.name)）。", "Can't reach the analysis engine (\(engine.name)). ") + fix
         case .timedOut?:
-            return "分析超时了：模型可能还在加载，或者内存不够。稍后点「重试」。"
+            return L("分析超时了：模型可能还在加载，或者内存不够。稍后点「重试」。",
+                     "Analysis timed out: the model may still be loading, or memory is tight. Tap Retry in a moment.")
         default:
             return error.localizedDescription
         }

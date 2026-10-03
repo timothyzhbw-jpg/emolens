@@ -1,7 +1,16 @@
-// 仿微信的演示聊天窗口：没有微信、或不想用真实聊天测试时，用它来试 EmoLens。
+// 演示聊天窗口：没有聊天软件、或不想用真实聊天测试时，用它来试 EmoLens。
 // 运行：swift run EmoLensDemo（每 DEMO_INTERVAL 秒收到一条新消息，默认 15 秒）
+// 英文对话：swift run EmoLensDemo --language en（或 EMOLENS_LANGUAGE=en；系统语言不是中文时默认英文）
 import AppKit
 import SwiftUI
+
+/// 和 EmoLens 一样的规则：--language > EMOLENS_LANGUAGE > 系统语言。
+let english: Bool = {
+    let args = CommandLine.arguments
+    if let i = args.firstIndex(of: "--language"), i + 1 < args.count { return args[i + 1] == "en" }
+    if let env = ProcessInfo.processInfo.environment["EMOLENS_LANGUAGE"] { return env == "en" }
+    return !(Locale.preferredLanguages.first ?? "").hasPrefix("zh")
+}()
 
 struct Line: Identifiable {
     enum Kind {
@@ -19,7 +28,10 @@ struct Line: Identifiable {
     var transcript: String?
 }
 
-let opening = [
+let opening = english ? [
+    Line(fromMe: true, text: "Grabbing dinner with coworkers tonight, might be home late"),
+    Line(fromMe: false, text: "k"),
+] : [
     Line(fromMe: true, text: "今晚和同事聚餐，可能晚点回"),
     Line(fromMe: false, text: "哦"),
 ]
@@ -30,7 +42,15 @@ enum Step {
     case transcribe(String)
 }
 
-let script: [Step] = [
+let script: [Step] = english ? [
+    .add([Line(fromMe: false, text: "no it's fine, work is obviously more important. who am i anyway")]),
+    .add([Line(fromMe: true, text: "don't be like that, I'll be home by 10 I promise"), Line(fromMe: false, text: "ok 🙂")]),
+    .add([Line(fromMe: false, text: "", kind: .voice(6))]),
+    .transcribe("so what time are you actually coming home, I'm literally falling asleep waiting"),
+    .add([Line(fromMe: true, text: "got you a slice from your favorite bakery"), Line(fromMe: false, text: "hmph", kind: .sticker)]),
+    .add([Line(fromMe: false, text: "oh btw my birthday is next wednesday, don't you dare forget 😘")]),
+    .add([Line(fromMe: false, text: "if you really cared about me you'd give me your phone passcode. otherwise you're obviously hiding something")]),
+] : [
     .add([Line(fromMe: false, text: "没关系呀，你工作最重要嘛，我算什么")]),
     .add([Line(fromMe: true, text: "别这样嘛，我十点前一定回来"), Line(fromMe: false, text: "好的🙂")]),
     .add([Line(fromMe: false, text: "", kind: .voice(6))]),
@@ -64,12 +84,12 @@ struct ChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("小美").font(.system(size: 15, weight: .medium)).padding(.vertical, 12)
+            Text(english ? "Mia" : "小美").font(.system(size: 15, weight: .medium)).padding(.vertical, 12)
             Divider()
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 14) {
-                        Text("昨天 21:05").font(.system(size: 12)).foregroundStyle(.secondary)
+                        Text(english ? "Yesterday 9:05 PM" : "昨天 21:05").font(.system(size: 12)).foregroundStyle(.secondary)
                         ForEach(conversation.lines) { Bubble(line: $0).id($0.id) }
                     }
                     .padding(16)
@@ -150,7 +170,7 @@ final class DemoDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let window = NSWindow(contentRect: NSRect(x: 120, y: 120, width: 520, height: 640),
                               styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
-        window.title = "EmoLens 演示聊天"
+        window.title = english ? "EmoLens Demo Chat" : "EmoLens 演示聊天"
         window.contentView = NSHostingView(rootView: ChatView(conversation: conversation))
         window.makeKeyAndOrderFront(nil)
         self.window = window

@@ -14,6 +14,17 @@ public enum SafetyNet {
         #"撑不下去了"#, #"我不在了"#, #"我就去死"#,
         #"(?i:suicid)"#, #"(?i:kill myself)"#, #"(?i:end (it all|my life))"#, #"(?i:(cut|hurt|harm)(ting)? myself)"#,
         #"(?i:self[- ]harm)"#, #"(?i:better off without me)"#,
+        // 英文：同样只收手段、计划、道别和消极念头；「I want to die」「kill me now」「I'm dead 😂」这类日常夸张不收。
+        #"(?i:(don['’]?t|do not|no longer) want to (live|be alive|exist|be here)( any ?more)?)"#,
+        #"(?i:no (reason|point) (to|in) (live|living|go(ing)? on))"#, #"(?i:wish I (was|were|could be) dead)"#,
+        #"(?i:take my (own )?life)"#, #"(?i:unalive (myself|me))"#, #"(?i:can['’]?t go on)"#,
+        #"(?i:(sleep|fall asleep|go to sleep) and (never|not) wake up)"#, #"(?i:never wake up again)"#,
+        #"(?i:(saved|saving|stockpiled|hoarded|stashed|collected) (up )?(enough |all (of )?(my|the) |my |the )?(pills|meds|sleeping pills))"#,
+        #"(?i:overdos(e|ing))"#, #"(?i:sleeping pills)"#, #"(?i:slit(ting)? my wrists?)"#, #"(?i:hang(ing)? myself)"#,
+        #"(?i:jump(ing)? off (a|the|this|that) (bridge|building|roof|cliff))"#,
+        #"(?i:I['’]?m (just )?a burden)"#, #"(?i:I am (just )?a burden)"#,
+        #"(?i:(no ?one|nobody) would (even )?(notice|care|miss me) if I)"#, #"(?i:if I (just )?(disappeared|was gone|were gone))"#,
+        #"(?i:goodbye forever)"#, #"(?i:(suicide|goodbye) (note|letter))"#, #"(?i:won['’]?t be (around|here) (much longer|for long|anymore))"#,
     ]
 
     private static let regex = try! NSRegularExpression(pattern: patterns.map { "(?:\($0))" }.joined(separator: "|"))
@@ -51,6 +62,14 @@ public enum MoneyNet {
         #"转(账|给我|到(这|我|下面|以下))"#, #"打钱"#, #"汇款"#, #"借(我|点)?.{0,4}(钱|块|元|万|\d)"#, #"垫付"#,
         #"(银行)?卡号"#, #"验证码"#, #"(支付|银行卡|登录|账号|取款)密码"#, #"保证金"#, #"收款码"#, #"刷单"#,
         #"安全账户"#, #"(?i:gift ?card)"#, #"(?i:wire (me|the) money)"#, #"(?i:verification code)"#,
+        // 英文：冒充熟人借钱、要卡号和一次性验证码。「I'll venmo you」这种我收钱的不算。
+        #"(?i:(lend|loan|front) me (some |a few |like )?(money|cash|bucks|\$ ?\d|\d))"#, #"(?i:borrow (some )?(money|cash|\$ ?\d|\d))"#,
+        #"(?i:(send|wire|transfer) (me )?(some |the )?(money|cash|funds|\$ ?\d|\d+ ?(dollars|bucks|usd)))"#,
+        #"(?i:(venmo|zelle|cash ?app|paypal) me)"#, #"(?i:western union|moneygram)"#,
+        #"(?i:(bank|card|account|routing|social security|ssn) (number|details|info))"#,
+        #"(?i:(bank|card|account|login|banking) (pin|password|passcode))"#,
+        #"(?i:(one[- ]time|security|2fa|login|6[- ]digit|auth(entication)?) code)"#,
+        #"(?i:send .{0,20}(bitcoin|btc|crypto|usdt))"#,
     ]
 
     private static let regex = try! NSRegularExpression(pattern: patterns.map { "(?:\($0))" }.joined(separator: "|"))

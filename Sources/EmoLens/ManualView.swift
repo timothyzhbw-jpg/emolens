@@ -2,7 +2,7 @@ import AppKit
 import EmoLensCore
 import SwiftUI
 
-/// 手动模式：把聊天记录粘贴进来分析，不用截屏，也不用开着微信。
+/// 手动模式：把聊天记录粘贴进来分析，不用截屏，也不用开着聊天软件。
 struct ManualView: View {
     @ObservedObject var monitor: Monitor
     @ObservedObject var settings: AppSettings
@@ -15,18 +15,20 @@ struct ManualView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionTitle(symbol: "doc.on.clipboard", title: "粘贴聊天记录") {
+            SectionTitle(symbol: "doc.on.clipboard", title: L("粘贴聊天记录", "Paste a chat")) {
                 if !parsed.messages.isEmpty {
-                    Text("\(parsed.messages.count) 条 · 对方 \(parsed.messages.filter { $0.speaker == .them }.count) 条")
+                    let theirs = parsed.messages.filter { $0.speaker == .them }.count
+                    Text(L("\(parsed.messages.count) 条 · 对方 \(theirs) 条", "\(parsed.messages.count) messages · \(theirs) from them"))
                         .font(.system(size: 10.5)).foregroundStyle(.tertiary)
                 }
             }
             editor
             if transcript.isEmpty {
-                Text("在聊天软件里选中几条消息复制，粘贴到这里。支持「小美：内容」和「小美 12:30」换行两种格式；认不出名字的行会算作对方说的。")
+                Text(L("在聊天软件里选中几条消息复制，粘贴到这里。支持「小美：内容」和「小美 12:30」换行两种格式；认不出名字的行会算作对方说的。",
+                       "Copy a few messages from your messaging app and paste them here. Works with \"Mia: message\", \"Mia — Today at 9:40 PM\" on its own line, and \"[10/3/26, 9:40 PM] Mia: message\" exports. Lines without a name count as theirs."))
                     .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             } else if latest == nil {
-                Text("没找到对方发的消息。如果整段都是你自己说的，就没什么可分析的。")
+                Text(L("没找到对方发的消息。如果整段都是你自己说的，就没什么可分析的。", "No messages from them found. If it's all you talking, there's nothing to analyze."))
                     .font(.system(size: 11)).foregroundStyle(.orange)
             }
             controls
@@ -54,22 +56,22 @@ struct ManualView: View {
 
     private var controls: some View {
         HStack(spacing: 6) {
-            Button("粘贴") {
+            Button(L("粘贴", "Paste")) {
                 transcript = NSPasteboard.general.string(forType: .string) ?? transcript
             }
             .buttonStyle(PillButtonStyle())
             if !transcript.isEmpty {
-                Button("清空") { transcript = "" }.buttonStyle(PillButtonStyle(tint: .secondary))
+                Button(L("清空", "Clear")) { transcript = "" }.buttonStyle(PillButtonStyle(tint: .secondary))
             }
             if parsed.names.count > 1 {
                 Picker("", selection: Binding(get: { monitor.manualContact ?? parsed.names[0] },
                                               set: { monitor.manualContact = $0 })) {
-                    ForEach(parsed.names, id: \.self) { Text("对方：\($0)").tag($0) }
+                    ForEach(parsed.names, id: \.self) { Text(L("对方：\($0)", "Them: \($0)")).tag($0) }
                 }
                 .labelsHidden().frame(maxWidth: 130)
             }
             Spacer()
-            Button(monitor.analyzing ? "分析中…" : "分析这段") {
+            Button(monitor.analyzing ? L("分析中…", "Analyzing…") : L("分析这段", "Analyze")) {
                 monitor.manualContact = monitor.manualContact ?? parsed.names.first
                 monitor.analyzeManual(transcript)
             }
@@ -86,11 +88,11 @@ struct ModeSwitch: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            tab("实时看聊天", symbol: "eye", selected: !manual) {
+            tab(L("实时看聊天", "Live"), symbol: "eye", selected: !manual) {
                 manual = false
                 monitor.start()
             }
-            tab("手动粘贴", symbol: "doc.on.clipboard", selected: manual) {
+            tab(L("手动粘贴", "Paste"), symbol: "doc.on.clipboard", selected: manual) {
                 manual = true
                 monitor.pause()   // 手动模式不截屏
             }

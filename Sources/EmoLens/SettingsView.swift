@@ -17,23 +17,35 @@ struct SettingsView: View {
         VStack(spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("设置").font(.system(size: 17, weight: .semibold))
-                    Text("选好窗口、框出聊天区域，再选分析引擎").font(.system(size: 11.5)).foregroundStyle(.secondary)
+                    Text(L("设置", "Settings")).font(.system(size: 17, weight: .semibold))
+                    Text(L("选好窗口、框出聊天区域，再选分析引擎", "Pick a window, select the chat area, then choose an engine"))
+                        .font(.system(size: 11.5)).foregroundStyle(.secondary)
                 }
                 Spacer()
             }
             .padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 4)
 
             Form {
-                Section("要看的窗口") {
+                Section {
+                    Picker(L("语言", "Language"), selection: $settings.language) {
+                        ForEach(AppLanguage.allCases, id: \.self) { Text($0.name).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                } footer: {
+                    Text(L("界面、分析用的提示词、关键词安全网和求助热线都会换成所选语言。",
+                           "Switches the interface, the analysis prompts, the keyword safety nets and the crisis resources."))
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+
+                Section(L("要看的窗口", "Window to watch")) {
                     HStack {
-                        Picker("窗口", selection: $settings.windowID) {
-                            Text("自动：正在开着的聊天软件").tag(CGWindowID(0))
+                        Picker(L("窗口", "Window"), selection: $settings.windowID) {
+                            Text(L("自动：正在开着的聊天软件", "Automatic: the messaging app that's open")).tag(CGWindowID(0))
                             ForEach(windows) { option in
                                 Text(option.name).tag(option.id)
                             }
                         }
-                        Button("刷新") { Task { await loadWindows() } }
+                        Button(L("刷新", "Refresh")) { Task { await loadWindows() } }
                     }
                 }
 
@@ -41,17 +53,18 @@ struct SettingsView: View {
                     RegionPicker(image: monitor.preview, region: $settings.region)
                         .frame(maxWidth: .infinity)
                     HStack {
-                        Text("只框住消息气泡那一栏，不要框左侧会话列表和底部输入框。")
+                        Text(L("只框住消息气泡那一栏，不要框左侧会话列表和底部输入框。",
+                               "Select only the column of message bubbles — not the conversation list or the input box."))
                             .font(.system(size: 11)).foregroundStyle(.secondary)
                         Spacer()
-                        Button("用整个窗口") { settings.region = CGRect(x: 0, y: 0, width: 1, height: 1) }
+                        Button(L("用整个窗口", "Use whole window")) { settings.region = CGRect(x: 0, y: 0, width: 1, height: 1) }
                     }
                 } header: {
-                    Text("聊天区域")
+                    Text(L("聊天区域", "Chat area"))
                 }
 
-                Section("分析引擎") {
-                    Picker("引擎", selection: $settings.engine) {
+                Section(L("分析引擎", "Analysis engine")) {
+                    Picker(L("引擎", "Engine"), selection: $settings.engine) {
                         ForEach(EngineKind.allCases) { kind in
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(kind.name)
@@ -63,76 +76,79 @@ struct SettingsView: View {
                     .pickerStyle(.radioGroup)
                     .onChange(of: settings.engine) { check = .idle }
                     if settings.engine != .systemOne {
-                        Picker("大模型来源", selection: $settings.llmProvider) {
+                        Picker(L("大模型来源", "Language model source"), selection: $settings.llmProvider) {
                             ForEach(LLMProvider.allCases) { Text($0.name).tag($0) }
                         }
                         .onChange(of: settings.llmProvider) { check = .idle }
                         providerFields
                     }
                     if settings.engine != .llm {
-                        Picker("决策模型来源", selection: $settings.systemOneProvider) {
+                        Picker(L("决策模型来源", "Decision model source"), selection: $settings.systemOneProvider) {
                             ForEach(SystemOneProvider.allCases) { Text($0.name).tag($0) }
                         }
                         .onChange(of: settings.systemOneProvider) { check = .idle }
                         systemOneFields
                     }
                     HStack {
-                        Button("测试连接") { Task { await testConnection() } }
+                        Button(L("测试连接", "Test connection")) { Task { await testConnection() } }
                             .disabled(check == .checking)
                         checkLabel
                     }
                 }
 
                 Section {
-                    Toggle("看懂表情和表情包", isOn: $settings.readImages)
+                    Toggle(L("看懂表情和表情包", "Read emoji and stickers"), isOn: $settings.readImages)
                 } header: {
-                    Text("表情")
+                    Text(L("表情", "Emoji"))
                 } footer: {
-                    Text("对方发表情、表情包时，把那一小块截图交给分析模型看（每条多约 1 秒）。模型不支持看图时自动跳过，只按「[表情]」分析。用云端模型时，这块截图也会发送给服务商。")
+                    Text(L("对方发表情、表情包时，把那一小块截图交给分析模型看（每条多约 1 秒）。模型不支持看图时自动跳过，只按「[表情]」分析。用云端模型时，这块截图也会发送给服务商。",
+                           "When they send an emoji or sticker, that small crop is shown to the model (about 1 extra second). Skipped if the model can't read images. With a cloud model, the crop is sent to the provider too."))
                         .font(.system(size: 11)).foregroundStyle(.secondary)
                 }
 
                 Section {
-                    Toggle("分析时参考联系人记忆", isOn: $settings.useMemory)
-                    Toggle("自动记录每次的分析结果", isOn: $settings.autoRecordMemory)
+                    Toggle(L("分析时参考联系人记忆", "Use contact memory when analyzing"), isOn: $settings.useMemory)
+                    Toggle(L("自动记录每次的分析结果", "Record each analysis automatically"), isOn: $settings.autoRecordMemory)
                     let contacts = monitor.memory.contacts.values.sorted { $0.name < $1.name }
                     if !contacts.isEmpty {
                         ForEach(contacts, id: \.name) { memory in
                             LabeledContent(memory.name) {
                                 HStack {
-                                    Text("\(memory.notes.count) 件事 · \(memory.entries.count) 次记录").foregroundStyle(.secondary)
-                                    Button("删除", role: .destructive) { monitor.forget(memory.name) }
+                                    Text(L("\(memory.notes.count) 件事 · \(memory.entries.count) 次记录", "\(memory.notes.count) notes · \(memory.entries.count) records"))
+                                        .foregroundStyle(.secondary)
+                                    Button(L("删除", "Delete"), role: .destructive) { monitor.forget(memory.name) }
                                 }
                             }
                         }
-                        Button("清空全部记忆", role: .destructive) { monitor.forgetAll() }
+                        Button(L("清空全部记忆", "Forget everyone"), role: .destructive) { monitor.forgetAll() }
                     }
                 } header: {
-                    Text("联系人记忆")
+                    Text(L("联系人记忆", "Contact memory"))
                 } footer: {
-                    Text("只存在本机：~/Library/Application Support/EmoLens/memory.json。用云端模型时，当前联系人的记忆摘要会随分析一起发送。")
+                    Text(L("只存在本机：~/Library/Application Support/EmoLens/memory.json。用云端模型时，当前联系人的记忆摘要会随分析一起发送。",
+                           "Stored only on this Mac: ~/Library/Application Support/EmoLens/memory.json. With a cloud model, the current contact's memory summary is sent along with each analysis."))
                         .font(.system(size: 11)).foregroundStyle(.secondary)
                 }
 
-                Section("其他") {
-                    LabeledContent("截图间隔") {
+                Section(L("其他", "Other")) {
+                    LabeledContent(L("截图间隔", "Capture interval")) {
                         HStack {
                             Slider(value: $settings.interval, in: 0.5...5, step: 0.5).frame(width: 160)
-                            Text("\(settings.interval, specifier: "%.1f") 秒").monospacedDigit().frame(width: 44, alignment: .trailing)
+                            Text(String(format: "%.1f", settings.interval) + L(" 秒", " s")).monospacedDigit().frame(width: 44, alignment: .trailing)
                         }
                     }
-                    LabeledContent("分析记录") {
-                        Button("清空", role: .destructive) { monitor.clearHistory() }
+                    LabeledContent(L("分析记录", "Analysis history")) {
+                        Button(L("清空", "Clear"), role: .destructive) { monitor.clearHistory() }
                     }
                 }
             }
             .formStyle(.grouped)
 
             HStack {
-                Text(settings.cloudProviderName.map { "会发送给：\($0)" } ?? "所有处理都在本机完成")
+                Text(settings.cloudProviderName.map { L("会发送给：\($0)", "Sent to: \($0)") } ?? L("所有处理都在本机完成", "Everything stays on this Mac"))
                     .font(.system(size: 11)).foregroundStyle(settings.cloudProviderName == nil ? Color.secondary : Color.orange)
                 Spacer()
-                Button("完成") { monitor.restart(); dismiss() }
+                Button(L("完成", "Done")) { monitor.restart(); dismiss() }
                     .keyboardShortcut(.defaultAction)
                     .controlSize(.large)
             }
@@ -145,21 +161,22 @@ struct SettingsView: View {
     @ViewBuilder private var providerFields: some View {
         switch settings.llmProvider {
         case .ollama:
-            TextField("Ollama 地址", text: $settings.ollamaURL)
-            TextField("模型", text: $settings.ollamaModel)
-            Toggle("没在运行时自动启动 Ollama", isOn: $settings.autoStartOllama)
-            Text("只对本机地址生效。本地起不来时会如实报错，不会自动改用云端模型。")
+            TextField(L("Ollama 地址", "Ollama URL"), text: $settings.ollamaURL)
+            TextField(L("模型", "Model"), text: $settings.ollamaModel)
+            Toggle(L("没在运行时自动启动 Ollama", "Start Ollama automatically if it isn't running"), isOn: $settings.autoStartOllama)
+            Text(L("只对本机地址生效。本地起不来时会如实报错，不会自动改用云端模型。",
+                   "Only for local addresses. If it can't start, EmoLens tells you — it never switches to a cloud model on its own."))
                 .font(.system(size: 11)).foregroundStyle(.secondary)
         case .openai:
-            Picker("服务", selection: Binding(get: { settings.openAIPreset }, set: { settings.applyOpenAIPreset($0) })) {
+            Picker(L("服务", "Service"), selection: Binding(get: { settings.openAIPreset }, set: { settings.applyOpenAIPreset($0) })) {
                 ForEach(OpenAIPreset.all) { Text($0.name).tag($0.id) }
             }
-            TextField("接口地址", text: $settings.openAIBaseURL)
-            TextField("模型", text: $settings.openAIModel, prompt: Text("例如 gpt-5.5"))
+            TextField(L("接口地址", "Base URL"), text: $settings.openAIBaseURL)
+            TextField(L("模型", "Model"), text: $settings.openAIModel, prompt: Text(L("例如 gpt-5.5", "e.g. gpt-5.5")))
             SecureField("API Key", text: $settings.openAIKey)
             cloudNote
         case .anthropic:
-            Picker("模型", selection: $settings.anthropicModel) {
+            Picker(L("模型", "Model"), selection: $settings.anthropicModel) {
                 ForEach(AnthropicBackend.models, id: \.self) { Text($0).tag($0) }
             }
             SecureField("API Key", text: $settings.anthropicKey)
@@ -168,7 +185,8 @@ struct SettingsView: View {
     }
 
     private var cloudNote: some View {
-        Label("云端模式：对方的消息和最近约 10 条聊天（以及对方发的表情截图）会发送给 \(settings.llmCloudName ?? "云端服务") 分析。API Key 只保存在本机钥匙串里。",
+        Label(L("云端模式：对方的消息和最近约 10 条聊天（以及对方发的表情截图）会发送给 \(settings.llmCloudName ?? "云端服务") 分析。API Key 只保存在本机钥匙串里。",
+                "Cloud mode: their message, the last ~10 messages (and any emoji crops) are sent to \(settings.llmCloudName ?? "the cloud service") for analysis. Your API key stays in this Mac's Keychain."),
               systemImage: "icloud.and.arrow.up")
             .font(.system(size: 11)).foregroundStyle(.orange)
     }
@@ -176,14 +194,15 @@ struct SettingsView: View {
     @ViewBuilder private var systemOneFields: some View {
         switch settings.systemOneProvider {
         case .kev:
-            TextField("Kev 地址", text: $settings.systemOneURL)
-            Text("本机运行，不联网、不花钱；约占 10 GB 内存。启动方法见 README。")
+            TextField(L("Kev 地址", "Kev URL"), text: $settings.systemOneURL)
+            Text(L("本机运行，不联网、不花钱；约占 10 GB 内存。启动方法见 README。", "Runs on this Mac, offline and free; uses about 10 GB of memory. See the README to start it."))
                 .font(.system(size: 11)).foregroundStyle(.secondary)
         case .jev:
             SecureField("API Key", text: $settings.jevKey)
-            TextField("模型", text: $settings.jevModel, prompt: Text(SystemOneSource.jevModel))
-            TextField("接口地址", text: $settings.jevURL)
-            Label("Jev 是 TypeSafe 的云端决策模型：对方的消息和最近约 10 条聊天会发送给 TypeSafe 分析，按量计费（很便宜）。它没有公开的中文评测。API Key 只保存在本机钥匙串里。",
+            TextField(L("模型", "Model"), text: $settings.jevModel, prompt: Text(SystemOneSource.jevModel))
+            TextField(L("接口地址", "Base URL"), text: $settings.jevURL)
+            Label(L("Jev 是 TypeSafe 的云端决策模型：对方的消息和最近约 10 条聊天会发送给 TypeSafe 分析，按量计费（很便宜）。它没有公开的中文评测。API Key 只保存在本机钥匙串里。",
+                    "Jev is TypeSafe's hosted decision model: their message and the last ~10 messages are sent to TypeSafe, billed per use (cheap). Your API key stays in this Mac's Keychain."),
                   systemImage: "icloud.and.arrow.up")
                 .font(.system(size: 11)).foregroundStyle(.orange)
         }
@@ -192,7 +211,7 @@ struct SettingsView: View {
     @ViewBuilder private var checkLabel: some View {
         switch check {
         case .idle: EmptyView()
-        case .checking: Text("连接中…").foregroundStyle(.secondary)
+        case .checking: Text(L("连接中…", "Connecting…")).foregroundStyle(.secondary)
         case .ok(let text): Label(text, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
         case .failed(let text): Label(text, systemImage: "xmark.octagon.fill").foregroundStyle(.red)
         }
@@ -213,40 +232,41 @@ struct SettingsView: View {
                 case .ollama:
                     let names = try await modelNames(settings.ollamaURL, path: "api/tags", key: "models", field: "name")
                     guard names.contains(settings.ollamaModel) else {
-                        check = .failed("Ollama 里没有 \(settings.ollamaModel)，先运行 ollama pull \(settings.ollamaModel)")
+                        check = .failed(L("Ollama 里没有 \(settings.ollamaModel)，先运行 ollama pull \(settings.ollamaModel)",
+                                          "\(settings.ollamaModel) isn't in Ollama yet — run ollama pull \(settings.ollamaModel)"))
                         return
                     }
-                    results.append("Ollama 正常")
+                    results.append(L("Ollama 正常", "Ollama OK"))
                 case .openai:
                     _ = try await get(settings.openAIBaseURL, path: "models",
                                       headers: ["Authorization": "Bearer \(settings.openAIKey)"])
-                    results.append("\(settings.llmCloudName ?? "服务") 连接正常")
+                    results.append(L("\(settings.llmCloudName ?? "服务") 连接正常", "\(settings.llmCloudName ?? "Service") connected"))
                 case .anthropic:
                     _ = try await get("https://api.anthropic.com", path: "v1/models",
                                       headers: ["x-api-key": settings.anthropicKey, "anthropic-version": "2023-06-01"])
-                    results.append("Claude 连接正常")
+                    results.append(L("Claude 连接正常", "Claude connected"))
                 }
             }
             if settings.engine != .llm {
                 switch settings.systemOneProvider {
                 case .kev:
                     _ = try await get(settings.systemOneURL, path: "v1/models")
-                    results.append("Kev 正常")
+                    results.append(L("Kev 正常", "Kev OK"))
                 case .jev:
                     guard !settings.jevKey.isEmpty else {
-                        check = .failed("还没填 Jev 的 API Key")
+                        check = .failed(L("还没填 Jev 的 API Key", "No Jev API key yet"))
                         return
                     }
                     // 查模型列表，不做判断，不花钱
                     _ = try await get(settings.jevURL, path: "v1/models", headers: ["Authorization": "Bearer \(settings.jevKey)"])
-                    results.append("Jev 连接正常")
+                    results.append(L("Jev 连接正常", "Jev connected"))
                 }
             }
-            check = .ok(results.joined(separator: "，"))
+            check = .ok(results.joined(separator: L("，", ", ")))
         } catch let error as AnalyzerError {
             check = .failed(error.localizedDescription)
         } catch {
-            check = .failed("连不上：\(error.localizedDescription)")
+            check = .failed(L("连不上：\(error.localizedDescription)", "Can't connect: \(error.localizedDescription)"))
         }
     }
 
@@ -276,7 +296,7 @@ struct WindowOption: Identifiable {
 
     init(window: SCWindow) {
         id = window.windowID
-        let app = window.owningApplication?.applicationName ?? "未知应用"
+        let app = window.owningApplication?.applicationName ?? L("未知应用", "Unknown app")
         let title = window.title ?? ""
         name = title.isEmpty || title == app ? app : "\(app) · \(title)"
     }
@@ -307,7 +327,7 @@ struct RegionPicker: View {
                     .frame(width: shown.width, height: shown.height)
                     .offset(x: shown.minX, y: shown.minY)
                 if dragging == nil && region == CGRect(x: 0, y: 0, width: 1, height: 1) {
-                    Text("按住鼠标拖一个框")
+                    Text(L("按住鼠标拖一个框", "Drag to draw a box"))
                         .font(.system(size: 12, weight: .medium)).foregroundStyle(.white)
                         .padding(.horizontal, 10).padding(.vertical, 6)
                         .background(Capsule().fill(Color.black.opacity(0.6)))
@@ -327,7 +347,8 @@ struct RegionPicker: View {
         } else {
             VStack(spacing: 6) {
                 Image(systemName: "rectangle.dashed").font(.system(size: 22)).foregroundStyle(.tertiary)
-                Text("还没有截图：确认聊天软件开着，并已允许屏幕录制权限").font(.system(size: 11.5)).foregroundStyle(.secondary)
+                Text(L("还没有截图：确认聊天软件开着，并已允许屏幕录制权限", "No screenshot yet: make sure your messaging app is open and Screen Recording is allowed"))
+                    .font(.system(size: 11.5)).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, minHeight: 140)
         }

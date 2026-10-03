@@ -47,7 +47,7 @@ enum WindowCapture {
             }
             hidden = hidden ?? windows.first
         }
-        return hidden.map { .hidden($0.owningApplication?.applicationName ?? "聊天软件") } ?? .missing
+        return hidden.map { .hidden($0.owningApplication?.applicationName ?? L("聊天软件", "Messaging app")) } ?? .missing
     }
 
     static func name(of window: SCWindow) -> String {
@@ -113,7 +113,7 @@ struct FrameSignature {
     }
 }
 
-/// Apple Vision 本地中英文 OCR。
+/// Apple Vision 本地中英文 OCR。英文界面下英文优先：Vision 按语言顺序做语言校正，英文聊天读得更准。
 enum TextRecognizer {
     /// Vision 在又高又窄的图上会整行漏字（实测 880×1611 的聊天截图漏掉 3 行，其中一条是语音时长），
     /// 所以高的截图切成几条接近方形、互相重叠的横条分别识别，再按每条的中间部分拼回来。
@@ -147,7 +147,7 @@ enum TextRecognizer {
     static func recognizeWhole(_ image: CGImage) throws -> [OCRLine] {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
-        request.recognitionLanguages = ["zh-Hans", "en-US"]
+        request.recognitionLanguages = AppLanguage.current == .en ? ["en-US", "zh-Hans"] : ["zh-Hans", "en-US"]
         request.usesLanguageCorrection = true
         try VNImageRequestHandler(cgImage: image).perform([request])
         return (request.results ?? []).compactMap { observation in
