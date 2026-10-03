@@ -225,4 +225,42 @@ final class EnglishTests: XCTestCase {
         XCTAssertNil(MemoryHints.suggestion(for: "the examples were weird"))
         XCTAssertNil(MemoryHints.suggestion(for: "lol ok"))
     }
+
+    // MARK: 截图里的英文时间、状态和在线状态
+
+    func testEnglishTimestampsAndReceiptsAreNotMessages() {
+        for text in ["9:41 PM", "9:41PM", "Yesterday 9:41 PM", "Today at 10:02 a.m.", "Mon 9:41 PM", "Oct 3, 2026 at 9:41 PM",
+                     "10/3/26, 9:41 PM", "Delivered", "Read 9:42 PM", "Seen yesterday 8:15 pm", "21:05", "昨天 21:05"] {
+            XCTAssertTrue(ChatParser.isTimestamp(text), text)
+        }
+        for text in ["Monday", "see you at 9", "read it yet?", "sent you the file", "I'll be there by 9:30 tho", "ok"] {
+            XCTAssertFalse(ChatParser.isTimestamp(text), text)
+        }
+    }
+
+    /// 气泡外面左边的「9:41 PM」不能变成对方的最新一条。
+    func testTimeUnderTheirBubbleIsNotTheirLatestMessage() {
+        let lines = [
+            OCRLine(text: "no it's fine, whatever", box: CGRect(x: 0.08, y: 0.40, width: 0.40, height: 0.03)),
+            OCRLine(text: "9:41 PM", box: CGRect(x: 0.08, y: 0.45, width: 0.10, height: 0.02)),
+            OCRLine(text: "sorry!!", box: CGRect(x: 0.70, y: 0.55, width: 0.20, height: 0.03)),
+            OCRLine(text: "Delivered", box: CGRect(x: 0.78, y: 0.60, width: 0.12, height: 0.02)),
+        ]
+        let messages = ChatParser.parse(lines)
+        XCTAssertEqual(messages.last { $0.speaker == .them }?.text, "no it's fine, whatever")
+        XCTAssertEqual(messages.filter { $0.speaker == .me }.map(\.text), ["sorry!!"])
+    }
+
+    func testPresenceLinesAreNotContactNames() {
+        let lines = [
+            OCRLine(text: "Mia Chen", box: CGRect(x: 0.4, y: 0.2, width: 0.2, height: 0.3)),
+            OCRLine(text: "Active now", box: CGRect(x: 0.4, y: 0.6, width: 0.2, height: 0.2)),
+        ]
+        XCTAssertEqual(ContactNameDetector.detect(lines), "Mia Chen")
+        for text in ["Active 5m ago", "online", "last seen today at 9:41 PM", "typing…", "Mia is typing...", "9:41 PM", "4 members"] {
+            XCTAssertNil(ContactNameDetector.clean(text), text)
+        }
+        XCTAssertEqual(ContactNameDetector.clean("Online Store"), "Online Store")
+        XCTAssertEqual(ContactNameDetector.clean("Mom"), "Mom")
+    }
 }

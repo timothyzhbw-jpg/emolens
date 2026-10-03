@@ -421,10 +421,14 @@ public enum ChatParser {
         return left < right ? .them : .me
     }
 
-    private static func isTimestamp(_ text: String) -> Bool {
+    static func isTimestamp(_ text: String) -> Bool {
         let pattern = #"^(?:(?:今天|昨天|前天|星期[一二三四五六日天]|周[一二三四五六日天]|(?:\d{4}年)?\d{1,2}月\d{1,2}日)\s*)?(?:凌晨|早上|上午|中午|下午|晚上)?\s*(?:[01]?\d|2[0-3])[:：][0-5]\d$"#
-        return text.range(of: pattern, options: .regularExpression) != nil
+        return text.range(of: pattern, options: .regularExpression) != nil || englishMeta.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
     }
+
+    /// 英文聊天软件气泡外面的时间和送达状态：「9:41 PM」「Yesterday at 9:41 PM」「Oct 3, 2026 9:41 PM」「Delivered」「Read 9:42 PM」。
+    /// 不认的话，左边的时间会被当成对方的新消息拿去分析。必须带时间或是状态词：单独的「Monday」可能是对方的回复。
+    private static let englishMeta = try! NSRegularExpression(pattern: #"^(?i:(?:(?:today|yesterday|mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday),?\s+)?(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\.?\s+\d{1,2}(?:,\s*\d{4})?,?\s+|\d{1,2}/\d{1,2}/\d{2,4},?\s+)?(?:at\s+)?\d{1,2}:\d{2}\s?(?:[ap]\.?m\.?)?|(?:delivered|seen|read|sent)(?:\s+(?:at\s+)?(?:(?:today|yesterday)\s+)?(?:\d{1,2}:\d{2}\s?(?:[ap]\.?m\.?)?|\d{1,2}/\d{1,2}/\d{2,4}))?)$"#)
 
     private static func edge(_ line: OCRLine, _ speaker: Speaker) -> Double {
         Double(speaker == .them ? line.box.minX : line.box.maxX)

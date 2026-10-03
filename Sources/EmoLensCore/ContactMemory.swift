@@ -258,7 +258,12 @@ public enum ContactNameDetector {
         }
         guard (1...30).contains(text.count),
               text.range(of: #"^[\d\s:：/.\-]+$"#, options: .regularExpression) == nil,   // 纯数字 / 时间
+              !ChatParser.isTimestamp(text),
+              text.range(of: presence, options: .regularExpression) == nil,
               !["…", "...", "···", "微信", "WeChat"].contains(text) else { return nil }
         return text
     }
+
+    /// 英文聊天软件在名字下面显示的在线状态，比名字更靠近聊天区域，不排除的话会被当成名字。
+    static let presence = #"^(?i:active now|active (?:\d+\s?(?:m|min|mins|minutes?|h|hrs?|hours?|d|days?)|an? (?:minute|hour|day)) ago|active today|online|offline|typing(?:\.\.\.|…)?|.* is typing(?:\.\.\.|…)?|last seen.*|seen .*ago|tap (?:here )?for (?:contact )?info|click here for (?:contact|group) info|(?:\d+ )?(?:members|participants)(?:,.*)?|在线|对方正在输入…?)$"#
 }
