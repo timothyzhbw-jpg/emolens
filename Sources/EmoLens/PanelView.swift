@@ -462,6 +462,7 @@ struct ManipulationNote: View {
                 Text(recent >= 2 ? L("这类施压最近 14 天出现了 \(recent) 次", "This kind of pressure came up \(recent) times in the last 14 days")
                      : L("这句话可能带有情感施压（偶尔一次不代表什么）", "This may be emotional pressure (once doesn't mean much)"))
                     .font(.system(size: 12, weight: .semibold))
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(recent >= 2
                      ? L("一再让你内疚或妥协不是小事。先照顾好自己的感受，必要时找信任的人聊聊，不必急着让步。",
                          "Being pushed into guilt or giving in again and again is not a small thing. Take care of yourself first, talk to someone you trust if you need to, and don't rush to give in.")

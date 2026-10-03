@@ -24,7 +24,7 @@ public enum ChatTranscript {
     /// 英文聊天软件复制出来的「名字 + 时间」行：「Alice — Today at 3:05 PM」「Alice, [10/3/2026 3:05 PM]」「Alice 3:05 PM」。
     /// 名字最多三个词、每个词大写开头，免得把「meet me at 3:05 PM」当成说话人。
     private static let englishHeader = regex(#"^((?:\p{Lu}[\p{L}'’.\-]*)(?:\s\p{Lu}[\p{L}'’.\-]*){0,2})\s*(?:,|—|–|-)?\s*\[?(?:(?:Today|Yesterday)(?:\s+at)?\s+|\d{1,2}/\d{1,2}/\d{2,4},?\s+)?\d{1,2}:\d{2}(?::\d{2})?\s?(?:[AaPp]\.?[Mm]\.?)?\]?$"#)
-    /// WhatsApp 这类导出格式的行首时间戳：「[10/3/26, 3:05:12 PM] 」「10/3/26, 3:05 PM - 」，去掉后剩「名字: 内容」。
+    /// 有些聊天软件导出的格式带行首时间戳：「[10/3/26, 3:05:12 PM] 」「10/3/26, 3:05 PM - 」，去掉后剩「名字: 内容」。
     private static let leadingStamp = regex(#"^\[?\d{1,4}[/.\-]\d{1,2}[/.\-]\d{1,4},?\s+\d{1,2}:\d{2}(?::\d{2})?\s?(?:[AaPp]\.?[Mm]\.?)?\]?\s*(?:-\s+)?"#)
     /// 英文的日期、时间分隔和「已送达 / 已读」状态行，跳过。
     private static let englishTimeOnly = regex(#"^(?i:(?:(?:Today|Yesterday|Mon(?:day)?|Tue(?:s|sday)?|Wed(?:nesday)?|Thu(?:rs|rsday)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?),?\s*)?(?:(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t|tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2}(?:,\s*\d{4})?,?\s*)?(?:\d{1,2}/\d{1,2}/\d{2,4},?\s*)?(?:(?:at\s+)?\d{1,2}:\d{2}(?::\d{2})?\s?(?:[ap]\.?m\.?)?)?|(?:Delivered|Seen|Read|Sent)(?:\s+(?:at\s+)?\d{1,2}:\d{2}\s?(?:[ap]m)?)?)$"#)

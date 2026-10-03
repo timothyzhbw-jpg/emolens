@@ -1,4 +1,4 @@
-# 临时：在 macOS 上渲染英文界面截图并提交回这个分支（云端会话是 Linux，渲染不了 SwiftUI）。用完即删。
+# 临时：在 macOS 上渲染英文界面截图并提交回这个分支（云端会话是 Linux，渲染不了 SwiftUI）。用完即删。第二次：操控提示的标题换行修好后重渲染。
 name: Screenshots
 
 on:

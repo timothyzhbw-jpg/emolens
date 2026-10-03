@@ -4,3 +4,6 @@
 DerivedData/
 .DS_Store
 build/
+eval/.adaption-*
+eval/en.localized.jsonl
+__pycache__/

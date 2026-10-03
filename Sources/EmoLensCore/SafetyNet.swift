@@ -24,6 +24,9 @@ public enum SafetyNet {
         #"(?i:jump(ing)? off (a|the|this|that) (bridge|building|roof|cliff))"#,
         #"(?i:I['’]?m (just )?a burden)"#, #"(?i:I am (just )?a burden)"#,
         #"(?i:(no ?one|nobody) would (even )?(notice|care|miss me) if I)"#, #"(?i:if I (just )?(disappeared|was gone|were gone))"#,
+        #"(?i:better off if I (just )?(wasn['’]?t|weren['’]?t|was not|were not) (around|here|alive))"#,
+        #"(?i:want (it all|everything) to (stop|end))"#, #"(?i:(don['’]?t|do not) see the point (of|in) (anything|living|life|going on))"#,
+        #"(?i:giv(e|ing) away (all )?(of )?my (stuff|things|belongings))"#,
         #"(?i:goodbye forever)"#, #"(?i:(suicide|goodbye) (note|letter))"#, #"(?i:won['’]?t be (around|here) (much longer|for long|anymore))"#,
     ]
 

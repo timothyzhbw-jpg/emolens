@@ -171,7 +171,9 @@ final class EnglishTests: XCTestCase {
                      "I just want to fall asleep and never wake up",
                      "I’m just a burden to everyone",
                      "I cut myself again, it's the only thing that helps",
-                     "there's no point in living like this"] {
+                     "there's no point in living like this",
+                     "sometimes i think everyone would be better off if i just wasn't around",
+                     "i just want it all to stop"] {
             XCTAssertTrue(SafetyNet.matches(text), text)
         }
     }

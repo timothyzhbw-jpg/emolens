@@ -36,7 +36,9 @@ enum EmoLensMain {
         // EmoLens --replay 1.png 2.png …：把几张聊天区域截图依次当成新画面，走一遍监控和分析（测试用，不截屏）。
         if let i = args.firstIndex(of: "--replay"), i + 1 < args.count {
             _ = NSApplication.shared
-            let urls = args[(i + 1)...].map { URL(fileURLWithPath: $0) }
+            var paths = Array(args[(i + 1)...])
+            if let flag = paths.firstIndex(of: "--language") { paths.removeSubrange(flag..<min(flag + 2, paths.count)) }
+            let urls = paths.map { URL(fileURLWithPath: $0) }
             Task { @MainActor in
                 await Inspector.replay(urls)
                 exit(0)
