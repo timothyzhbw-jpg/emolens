@@ -78,7 +78,8 @@ Swift, SwiftUI, ScreenCaptureKit, Apple Vision, Ollama, Qwen 3.5, Anthropic Clau
 ### Links
 
 - Code: https://github.com/timothyzhbw-jpg/emolens
-- Demo video (2–3 min, public or unlisted): *(add your link)*
+- Demo video (2:34, unlisted on YouTube): https://youtu.be/0pES4swhUzs — recorded live with EmoLens's built-in recorder, narration and captions added afterwards; the chat with "Mia" is fictional
+- Download: https://github.com/timothyzhbw-jpg/emolens/releases/latest
 
 ## Demo video script (2–3 minutes; LovHack requires 2–3 min)
 
@@ -95,7 +96,7 @@ Most of the video should show the product itself, not slides.
 
 - [ ] Every team member meets the eligibility rules (LovHack Season 3 is for students aged 13–24; teams of 1–4).
 - [ ] Devpost form filled from the sections above, **including the disclosure section**.
-- [ ] Demo video recorded (script above), **between 2 and 3 minutes**, uploaded as public or unlisted (judges must be able to watch it without requesting access), and linked.
+- [x] Demo video recorded (2:34), uploaded unlisted, and linked.
 - [ ] "Built with" / technologies list filled in (copy from above).
 - [ ] Repository link added; this branch merged to `main` so judges see the English README.
 - [ ] Optional: a 0.6.0 DMG built on a Mac (`./scripts/make_dmg.sh`, with `VERSION` bumped in `scripts/build_app.sh`) and published under Releases, so judges can try it without building.

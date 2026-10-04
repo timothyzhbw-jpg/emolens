@@ -2,7 +2,7 @@
 
 **Read the subtext in "no it's fine, whatever."**
 
-[中文说明](README.zh-CN.md) · [LovHack Season 3 submission notes](docs/LOVHACK.md)
+**[▶ Watch the 2½-minute demo](https://youtu.be/0pES4swhUzs)** · [Download for Mac](https://github.com/timothyzhbw-jpg/emolens/releases/latest) · [中文说明](README.zh-CN.md) · [LovHack Season 3 submission notes](docs/LOVHACK.md)
 
 EmoLens is an open-source macOS floating panel that watches your messaging app's chat window, the way a screen share would. It reads the other person's latest message and tells you:
 
