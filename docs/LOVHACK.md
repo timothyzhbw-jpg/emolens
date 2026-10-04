@@ -17,7 +17,8 @@ LovHack asks entrants to say clearly what was created during the event and to di
 5. **An English evaluation set and scorer.** 45 labeled chats in [`eval/en.jsonl`](../eval/en.jsonl), with hard negatives (hyperbole that must *not* be flagged, ordinary hurt that is *not* manipulation), and [`scripts/score_eval.py`](../scripts/score_eval.py).
 6. **Adaption Labs integration.** [`scripts/adaption_localize_eval.py`](../scripts/adaption_localize_eval.py) uses the Adaption Adaptive Data API (`datasets.create` → `localize` → `download`) to rewrite the eval set into British, Australian, Indian and Canadian English while keeping the labels, so we can measure whether EmoLens still catches sarcasm and warning signs across Englishes. An `estimate` mode quotes the credit cost before anything is spent. (The script is ready; we haven't spent the credits to run it yet.)
 7. **A demo recorder.** `EMOLENS_RECORD=demo.mov` records only the demo chat window and the EmoLens panel with ScreenCaptureKit (nothing else on screen), while a script plays the conversation and the paste-mode examples. The demo video was recorded with it.
-8. **CI that renders the UI.** GitHub Actions now builds, runs the unit tests (131 at submission, including the new English-pipeline tests) and renders every panel state in both languages on macOS. The English screenshots in the README come from there.
+8. **CI that renders the UI.** GitHub Actions now builds, runs the unit tests (134 at submission, including the new English-pipeline and deAPI tests) and renders every panel state in both languages on macOS. The English screenshots in the README come from there.
+9. **Voice messages with deAPI.** EmoLens could only *see* a voice message before, so the user had to transcribe it in their messaging app. Now, with deAPI turned on, the panel shows **Listen (deAPI)**: the user plays the message, EmoLens records **only that app's audio** with ScreenCaptureKit (a per-app audio filter, 16 kHz mono WAV, never the microphone or EmoLens itself), sends it to deAPI's OpenAI-compatible `POST /v1/audio/transcriptions` with **Whisper Large V3**, deletes the recording, and analyzes the transcript like any other message. New code: [`DeAPITranscriber.swift`](../Sources/EmoLensCore/DeAPITranscriber.swift) (multipart client), [`VoiceListener.swift`](../Sources/EmoLens/VoiceListener.swift) (per-app audio capture with a loudness check so silence is never uploaded), the listen flow in `Monitor.swift`, a Settings section with a key stored in the Keychain and a **Test deAPI** button, and unit tests for the request format, empty transcripts and auth errors. Tested end to end against the real deAPI service: 12 s of captured audio came back as text in about 6 s, and it's in the demo video.
 
 ## Devpost form
 
@@ -38,47 +39,51 @@ EmoLens is a floating macOS panel that watches your messaging app's window, the 
 - how to respond, and one line you could send;
 - per-contact memory ("interview next Wednesday"), saved only when you confirm.
 
-It reads emoji, stickers and voice-message transcripts, not just text. There's also a paste mode for chats copied from anywhere. Everything runs on your Mac by default; cloud models are opt-in and the panel always says when messages leave your machine.
+It reads emoji, stickers and voice-message transcripts, not just text, and with **deAPI** turned on it can listen to a voice message that hasn't been transcribed yet. There's also a paste mode for chats copied from anywhere. Everything runs on your Mac by default; cloud models are opt-in and the panel always says when messages leave your machine.
 
 ### How we built it
 
 - **Swift + SwiftUI** floating panel; **ScreenCaptureKit** captures just the chat window; **Apple Vision** OCR reads the text locally.
 - A pixel-level layout detector finds bubbles, avatars, emoji and stickers, so left vs. right tells "them" from "me". Emoji are painted out before OCR, then cropped and named by a vision model.
 - The default analysis model is **Qwen 3.5 4B on Ollama**, running locally with a structured JSON answer and few-shot examples. Users can opt into **Anthropic Claude** (structured outputs) or any **OpenAI-compatible** API, and optionally a calibrated **System One decision model** (local Kev or TypeSafe's Jev) that double-checks the serious signals.
+- **deAPI** (Whisper Large V3) transcribes voice messages on request: EmoLens records only the messaging app's audio with ScreenCaptureKit while the user plays the message, and sends that clip to deAPI's OpenAI-compatible transcription endpoint.
 - **Keyword safety nets** run on every engine and are deliberately conservative about everyday hyperbole.
-- For the hackathon we built the **English version**: a bilingual UI layer, an English prompt and examples, label mapping, English safety nets and paste formats, an English eval set, and an **Adaption Labs** pipeline that localizes the eval set into other Englishes.
+- For the hackathon we built the **English version**: a bilingual UI layer, an English prompt and examples, label mapping, English safety nets and paste formats, an English eval set, and an **Adaption Labs** pipeline that localizes the eval set into other Englishes. We also added **deAPI voice transcription**.
 - **GitHub Actions** on macOS builds, tests and renders UI previews on every push.
 
 ### Challenges we ran into
 
 - **Hyperbole vs. danger.** "I'm dead 💀" and "I just want it all to stop" look similar to a keyword list. We wrote hard-negative test cases first and only added patterns that pass them.
 - **Two languages, one brain.** Memory, colors and history were built on Chinese labels. Instead of rewriting everything, the English model answers with English labels that map onto the same internal labels, and a unit test checks that the few-shot examples use exactly the same format as the live prompt.
+- **Hearing one app and nothing else.** A voice message plays through the messaging app, but recording the whole system would pick up music, calls and other apps. ScreenCaptureKit can filter audio to a single app, so EmoLens records only the chat app, checks the clip is actually loud enough before uploading, and stops a few seconds after the message's length.
 - **Developing a macOS app from a Linux cloud session.** Most of the English version was written in a cloud session that couldn't compile the app, so every change was validated by macOS CI, including rendering the screenshots. The final integration, the eval runs and the demo recording then happened on a Mac, where recording the real demo window turned up two bugs (transparent window corners read as stickers, and a misread voice-message duration) that we fixed in 0.6.1.
 
 ### Accomplishments that we're proud of
 
 - The full English version passed the macOS build and all 126 unit tests on its first CI run.
 - On the new English eval set, the full pipeline with the local 4B model got the emotion right 76% of the time (29/38), caught 5/6 crisis messages and 3/3 scams, and raised **zero** false alarms across 22 checks on hyperbole, ordinary hurt and normal chat. It is weakest on quiet signals: cold, distant replies (0/3) and manipulation dressed up as affection (2/5).
-- It's private by default: no chat ever leaves the Mac unless you choose a cloud model.
+- It's private by default: no chat ever leaves the Mac unless you choose a cloud model, and a voice clip goes to deAPI only when you tap Listen.
+- deAPI voice transcription works end to end against the real service: 12 s of audio from the demo chat came back as punctuated text in about 6 s, and the 4B model then read it as anxious and needing reassurance.
 
 ### What we learned
 
-Subtext is cultural. The same "fine." reads differently in a family chat and a work chat, and in Sydney and in Ohio. Small local models can do a surprising amount if the prompt teaches the conventions, but they still slip: in our demo recording the 4B model took "ok 🙂" after being stood up at face value. That is why the high-stakes signals get a second line of defense that doesn't depend on the model.
+Subtext is cultural. The same "fine." reads differently in a family chat and a work chat, and in Sydney and in Ohio. Small local models can do a surprising amount if the prompt teaches the conventions, but they still slip: in our demo recording the 4B model labeled "ok 🙂" after being stood up as *affectionate*, even though its explanation caught that she was still hurt. That is why the high-stakes signals get a second line of defense that doesn't depend on the model.
 
 ### What's next
 
 - Run the Adaption-localized eval across GB/AU/IN/CA English and tune the prompt where it slips.
-- Notarize the DMG (0.6.x is published but not notarized, so macOS asks for confirmation on first launch).
+- Notarize the DMG (releases are published but not notarized, so macOS asks for confirmation on first launch).
+- Optionally pass the chat's language to deAPI, and try deAPI's word-level timestamps to highlight the part of a voice message that carries the emotion.
 - More languages through the same label mapping, starting with Spanish.
 
 ### Built with
 
-Swift, SwiftUI, ScreenCaptureKit, Apple Vision, Ollama, Qwen 3.5, Anthropic Claude API, OpenAI-compatible APIs, Kev / TypeSafe Jev (System One), Adaption Labs Adaptive Data API, Python, GitHub Actions
+Swift, SwiftUI, ScreenCaptureKit, Apple Vision, Ollama, Qwen 3.5, Anthropic Claude API, OpenAI-compatible APIs, Kev / TypeSafe Jev (System One), deAPI (Whisper Large V3), Adaption Labs Adaptive Data API, Python, GitHub Actions
 
 ### Links
 
 - Code: https://github.com/timothyzhbw-jpg/emolens
-- Demo video (2:34, unlisted on YouTube): https://youtu.be/0pES4swhUzs — recorded live with EmoLens's built-in recorder, narration and captions added afterwards; the chat with "Mia" is fictional
+- Demo video (2:47, unlisted on YouTube): https://youtu.be/ymP04A_ECEM — recorded live with EmoLens's built-in recorder (including the real deAPI transcription), narration and captions added afterwards; the chat with "Mia" and her voice message (macOS text-to-speech) are fictional
 - Download: https://github.com/timothyzhbw-jpg/emolens/releases/latest
 
 ## Demo video script (2–3 minutes; LovHack requires 2–3 min)
@@ -87,7 +92,7 @@ Most of the video should show the product itself, not slides.
 
 1. **Hook (10 s).** A chat on screen with Mia: "no it's fine, work is obviously more important. who am i anyway". Voice-over: "Is this fine? It's not."
 2. **Setup (15 s).** `swift run EmoLensDemo --language en` and open EmoLens. Point at "Analyzed on this Mac only, nothing uploaded".
-3. **Live reads (45 s).** Let the demo script play. Show **Hurt · Sarcastic** with the suggested apology; "ok 🙂" read as *not* happy; the voice message prompt, then the transcription being analyzed; the "hmph" sticker read as playful; "my birthday is next wednesday" → "Remember this?" → Remember.
+3. **Live reads (45 s).** Let the demo script play. Show **Hurt · Sarcastic** with the suggested apology; "ok 🙂" read as *not* happy; the voice message: tap Listen, the demo plays it, deAPI transcribes it, and the transcript is analyzed; the "hmph" sticker read as playful; "my birthday is next wednesday" → "Remember this?" → Remember.
 4. **The serious part (30 s).** The passcode message → **Emotional manipulation** + "Hold your boundary". Switch to Paste mode and paste "sometimes i feel like nobody would even notice if i disappeared" → crisis card with 988 / Crisis Text Line. Then paste "LMAO I'm dead 💀" → no crisis flag.
 5. **Under the hood (15 s).** Settings: language switch, local vs. cloud model. Mention the eval set and the Adaption localization across Englishes.
 6. **Close (5 s).** "EmoLens: read the subtext, privately."
@@ -96,9 +101,10 @@ Most of the video should show the product itself, not slides.
 
 - [ ] Every team member meets the eligibility rules (LovHack Season 3 is for students aged 13–24; teams of 1–4).
 - [ ] Devpost form filled from the sections above, **including the disclosure section**.
-- [x] Demo video recorded (2:34), uploaded unlisted, and linked.
+- [x] Demo video recorded (2:47, with deAPI listening to a voice message), uploaded unlisted, and linked.
 - [ ] "Built with" / technologies list filled in (copy from above).
 - [x] Repository link added; this branch merged to `main` so judges see the English README.
-- [x] DMG published under Releases (0.6.0, then 0.6.1 with two fixes found while recording the demo), so judges can try it without building.
+- [x] DMG published under Releases (0.6.0, then 0.6.1 with two fixes found while recording the demo, then 0.7.0 with deAPI voice transcription), so judges can try it without building.
+- [ ] Under "Additional info", opt in to **Best Use of deAPI**.
 - [ ] Optional: with your Adaption credits, run `python3 scripts/adaption_localize_eval.py estimate`, then `run`, and add the localized results to the README.
 - [ ] Submitted before the Oct 4 deadline (check the timezone on the Devpost page).

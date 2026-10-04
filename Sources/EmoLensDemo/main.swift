@@ -120,6 +120,8 @@ final class Conversation: ObservableObject {
                 }
             }
         case .transcribe(let text):
+            // DEMO_SKIP_TRANSCRIBE=1：聊天窗口不自己转文字（演示 EmoLens 用 deAPI 听语音时用）
+            if ProcessInfo.processInfo.environment["DEMO_SKIP_TRANSCRIBE"] == "1" { break }
             if let index = lines.lastIndex(where: { if case .voice = $0.kind { true } else { false } }) {
                 lines[index].transcript = text
             }

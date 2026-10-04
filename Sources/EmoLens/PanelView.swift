@@ -32,7 +32,7 @@ struct PanelView: View {
                 content.frame(maxHeight: .infinity, alignment: .top)
             }
             Hairline()
-            PrivacyFooter(cloud: settings.cloudProviderName)
+            PrivacyFooter(cloud: settings.analysisCloudName, voice: settings.canListenToVoice)
         }
         // 切换语言时整个面板重建，所有文字一起换
         .id(settings.language)
@@ -715,20 +715,29 @@ struct Onboarding: View {
 }
 
 struct PrivacyFooter: View {
-    /// 用云端模型时的服务名；本地为 nil。
+    /// 用云端模型分析时的服务名；本地为 nil。
     var cloud: String? = nil
+    /// 开了 deAPI 听语音：只有点「听这条语音」时录下的语音会发给 deAPI，分析仍按上面的设置。
+    var voice = false
 
     var body: some View {
         HStack(spacing: 5) {
             if let cloud {
                 Image(systemName: "icloud.and.arrow.up").font(.system(size: 9)).foregroundStyle(.orange)
-                Text(L("云端分析：消息会发送给 \(cloud) · 结果仅供参考", "Cloud analysis: messages are sent to \(cloud) · for reference only"))
+                Text(L("云端分析：消息会发送给 \(cloud)", "Cloud analysis: messages are sent to \(cloud)")
+                     + (voice ? L("，语音在你点「听」时发给 deAPI", "; voice clips go to deAPI when you tap Listen") : "")
+                     + L(" · 结果仅供参考", " · for reference only"))
                     .foregroundStyle(.orange)
+            } else if voice {
+                Image(systemName: "lock.fill").font(.system(size: 9))
+                Text(L("在本机分析 · 只有你点「听」时语音会发给 deAPI 转文字 · 结果仅供参考",
+                       "Analyzed on this Mac · voice clips go to deAPI only when you tap Listen · for reference only"))
             } else {
                 Image(systemName: "lock.fill").font(.system(size: 9))
                 Text(L("只在本机分析，不上传聊天内容 · 结果仅供参考", "Analyzed on this Mac only, nothing uploaded · for reference only"))
             }
         }
+        .multilineTextAlignment(.center)
         .font(.system(size: 10.5))
         .foregroundStyle(.tertiary)
         .frame(maxWidth: .infinity)

@@ -127,7 +127,7 @@ struct MemoryView: View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "lock.fill").font(.system(size: 10)).foregroundStyle(.tertiary).padding(.top, 2)
             Text(L("只存在本机（~/Library/Application Support/EmoLens）。", "Stored only on this Mac (~/Library/Application Support/EmoLens). ")
-                 + (settings.cloudProviderName.map { L("用云端模型时，记忆摘要会随分析一起发送给 \($0)。", "With a cloud model, a memory summary is sent to \($0) with each analysis.") } ?? ""))
+                 + (settings.analysisCloudName.map { L("用云端模型时，记忆摘要会随分析一起发送给 \($0)。", "With a cloud model, a memory summary is sent to \($0) with each analysis.") } ?? ""))
                 .font(.system(size: 10.5)).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
             Spacer()
             Button(L("清空 TA 的记忆", "Forget them"), role: .destructive) { confirmForget = true }

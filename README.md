@@ -2,7 +2,7 @@
 
 **Read the subtext in "no it's fine, whatever."**
 
-**[▶ Watch the 2½-minute demo](https://youtu.be/0pES4swhUzs)** · [Download for Mac](https://github.com/timothyzhbw-jpg/emolens/releases/latest) · [中文说明](README.zh-CN.md) · [LovHack Season 3 submission notes](docs/LOVHACK.md)
+**[▶ Watch the 3-minute demo](https://youtu.be/ymP04A_ECEM)** · [Download for Mac](https://github.com/timothyzhbw-jpg/emolens/releases/latest) · [中文说明](README.zh-CN.md) · [LovHack Season 3 submission notes](docs/LOVHACK.md)
 
 EmoLens is an open-source macOS floating panel that watches your messaging app's chat window, the way a screen share would. It reads the other person's latest message and tells you:
 
@@ -17,7 +17,7 @@ EmoLens is an open-source macOS floating panel that watches your messaging app's
   <img src="docs/screenshots/en/manipulation-dark.png" width="300" alt="Flagging emotional manipulation (dark mode)">
 </p>
 
-> By default, screen capture, text recognition and analysis all happen **on your Mac** (local Ollama model). No chat content is uploaded. You can opt into cloud models such as **OpenAI, Claude, DeepSeek or Qwen** for sharper reads of subtext; then their message and roughly the last 10 messages go to the provider you chose, and the panel says so the whole time.
+> By default, screen capture, text recognition and analysis all happen **on your Mac** (local Ollama model). No chat content is uploaded. You can opt into cloud models such as **OpenAI, Claude, DeepSeek or Qwen** for sharper reads of subtext; then their message and roughly the last 10 messages go to the provider you chose, and the panel says so the whole time. Voice messages can optionally be transcribed by [deAPI](https://deapi.ai): only the clip you choose to play, only when you tap Listen.
 >
 > EmoLens doesn't plug into any messaging app's protocol, inject anything, or send messages. It only reads the screen, so it can't get your account banned.
 
@@ -47,7 +47,7 @@ open build/EmoLens.app
 
 ### Download
 
-Pre-built DMGs are on the [Releases](https://github.com/timothyzhbw-jpg/emolens/releases/latest) page; drag **EmoLens** into Applications. The English version needs release 0.6.0 or later; until that's published, build from source as above. EmoLens is a personal open-source project without a paid Apple Developer ID, so **macOS blocks the first launch** ("can't verify the developer"). Click Done, then open System Settings → Privacy & Security and click "Open Anyway" at the bottom. Or run once: `xattr -dr com.apple.quarantine /Applications/EmoLens.app`.
+Pre-built DMGs are on the [Releases](https://github.com/timothyzhbw-jpg/emolens/releases/latest) page; drag **EmoLens** into Applications. The English version needs release 0.6.0 or later, and listening to voice messages with deAPI needs 0.7.0 or later. EmoLens is a personal open-source project without a paid Apple Developer ID, so **macOS blocks the first launch** ("can't verify the developer"). Click Done, then open System Settings → Privacy & Security and click "Open Anyway" at the bottom. Or run once: `xattr -dr com.apple.quarantine /Applications/EmoLens.app`.
 
 ### First run
 
@@ -83,10 +83,23 @@ People don't only type. Besides reading the text, EmoLens finds each bubble, sti
 | Text with an emoji: "ok 🙂" | `ok [emoji: slight smile]`. It paints the emoji out before OCR (letters next to emoji are the most misread), then crops and enlarges the emoji and asks the model what it is |
 | Just an emoji or a sticker | `[sticker: cat covering its ears, text says "not listening"]`. Before, these had no text for OCR and were missed entirely |
 | A voice message, already transcribed | `[voice-to-text] so what time are you coming home`. It's analyzed as text, and the model is told it came from speech and may have typos |
-| A voice message, not transcribed | The panel says "They sent a 6-second voice message". Convert it to text in your messaging app and analysis continues automatically |
+| A voice message, not transcribed | The panel says "They sent a 6-second voice message". Convert it to text in your messaging app and analysis continues automatically, or, with [deAPI](#voice-messages-with-deapi) on, tap **Listen** and play it |
 | A quoted reply | `what time (replying to: Me: working late)`. The quote isn't mistaken for a new message |
 
 Emoji carry their own social rules: 🙂 after being stood up is usually "I'm done", not happiness; 💀 and 😭 usually mean laughing hard. When a chat contains emoji or voice messages, a short note about these conventions is attached for the model; plain-text chats get exactly the same prompt as before.
+
+### Voice messages with deAPI
+
+<p align="center"><img src="docs/screenshots/en/voice-deapi.png" width="300" alt="Listen to a voice message with deAPI"></p>
+
+EmoLens reads the screen, so it can't hear a voice message on its own. In Settings, turn on **Listen to voice messages with deAPI (cloud)** and paste a [deAPI](https://deapi.ai) API key (it's stored in the Keychain). When they send an untranscribed voice message:
+
+1. Tap **Listen (deAPI)** on the panel, then play the message in your messaging app.
+2. EmoLens records **only that app's audio** with ScreenCaptureKit (not your microphone, not other apps, not EmoLens itself), and stops on its own a few seconds after the message's length, or when you tap Done.
+3. The clip is sent to deAPI's OpenAI-compatible `POST /v1/audio/transcriptions` endpoint and transcribed by **Whisper Large V3** (about 6 seconds for a short message in our tests; deAPI lists it at about $0.05 per hour of audio). The recording is deleted right after.
+4. The transcript joins the chat as `[voice-to-text] …` and is analyzed like any other message, by whichever analysis model you chose (the local one by default).
+
+Nothing is sent to deAPI unless you tap Listen, and silence is never uploaded. The **Test deAPI** button in Settings checks the key and model without sending any audio.
 
 Debug recognition with `EmoLens --inspect screenshot.png [--analyze] --language en`. It prints the OCR result, the detected bubbles and the assembled messages. Screenshots never leave your Mac.
 
@@ -110,6 +123,8 @@ The memory summary is given to the model as background, with an explicit instruc
 | **Local Ollama** (default) | `qwen3.5:4b`. Data never leaves your Mac, and it's free. A 4B model occasionally misreads complex situations |
 | **OpenAI-compatible** | OpenAI (default `gpt-5.5`), DeepSeek, Qwen, OpenRouter, or any OpenAI-compatible endpoint |
 | **Anthropic Claude** | Native Messages API with structured outputs; default `claude-opus-5`, also `claude-sonnet-5`, `claude-haiku-4-5` |
+
+Speech-to-text for voice messages is separate and optional: [deAPI](#voice-messages-with-deapi) (Whisper Large V3).
 
 - Cloud models are constrained with **structured outputs** (JSON Schema); compatible services without schema support fall back to JSON mode.
 - API keys are stored only in the macOS Keychain, never in config files or logs.
@@ -173,7 +188,7 @@ The English model answers with English labels (`sarcastic`, `hurt`, `hold bounda
 
 ## Limitations
 
-- **It only sees what's on screen.** Voice messages need to be transcribed in your messaging app first. Videos, files and link cards are read by their visible text. Bubble, avatar and name detection follows common chat layouts and can occasionally misread a different app, theme or font size.
+- **It only sees what's on screen.** Voice messages need to be transcribed in your messaging app first, or played while EmoLens listens with deAPI turned on. Videos, files and link cards are read by their visible text. Bubble, avatar and name detection follows common chat layouts and can occasionally misread a different app, theme or font size.
 - **Small models aren't always right about emoji.** 😂 might come back as "laughing sweating". Stickers with text are read most reliably.
 - **It analyzes only their latest message**, with about the last 10 messages as context.
 - **Contact names come from the title bar.** Draw the chat area just below the name. If it's wrong, click the pencil on the panel.
@@ -220,6 +235,7 @@ Set `EMOLENS_LOG=/path/reports.jsonl` to append every result to a file, and `EMO
 - [Kev](https://github.com/jaredpalmer/kev): open-weights System One decision model
 - [Ollama](https://ollama.com) and [Qwen](https://github.com/QwenLM)
 - [Adaption Labs](https://adaptionlabs.ai): Adaptive Data API used to localize the English eval set
+- [deAPI](https://deapi.ai): Whisper Large V3 transcription for voice messages
 - Built with Claude; OpenAI Codex implemented the bubble parser and new-message detection; Grok reviewed the emotion dimensions and prompts.
 
 ## License

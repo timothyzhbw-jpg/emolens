@@ -136,7 +136,9 @@ final class DemoRecorder: NSObject, SCRecordingOutputDelegate {
         config.showsCursor = false
         config.backgroundColor = background
         config.minimumFrameInterval = CMTime(value: 1, timescale: 30)
-        config.capturesAudio = false
+        // 录下演示窗口发出的声音（语音消息被播放时能听到），不录 EmoLens 自己
+        config.capturesAudio = ProcessInfo.processInfo.environment["EMOLENS_RECORD_AUDIO"] == "1"
+        config.excludesCurrentProcessAudio = true
 
         let stream = SCStream(filter: SCContentFilter(display: display, including: windows), configuration: config, delegate: nil)
         let recording = SCRecordingOutputConfiguration()

@@ -150,11 +150,16 @@ final class AppSettings: ObservableObject {
         if !preset.model.isEmpty { openAIModel = preset.model }
     }
 
-    /// 所有会收到聊天内容的云端服务（大模型和 Jev），全在本机时为 nil。界面据此提示消息会不会发出去。
-    var cloudProviderName: String? {
+    /// 会收到聊天文字的云端分析服务（大模型和 Jev），全在本机分析时为 nil。
+    var analysisCloudName: String? {
         let names = [engine != .systemOne ? llmCloudName : nil,
-                     engine != .llm && systemOneProvider == .jev ? L("TypeSafe（Jev）", "TypeSafe (Jev)") : nil,
-                     deapiEnabled ? L("deAPI（你点「听这条语音」时）", "deAPI (when you tap Listen)") : nil].compactMap { $0 }
+                     engine != .llm && systemOneProvider == .jev ? L("TypeSafe（Jev）", "TypeSafe (Jev)") : nil].compactMap { $0 }
+        return names.isEmpty ? nil : names.joined(separator: L("、", ", "))
+    }
+
+    /// 所有会收到聊天内容的云端服务，包括只收语音的 deAPI；全在本机时为 nil。设置页据此提示内容会发给谁。
+    var cloudProviderName: String? {
+        let names = [analysisCloudName, deapiEnabled ? L("deAPI（你点「听这条语音」时）", "deAPI (when you tap Listen)") : nil].compactMap { $0 }
         return names.isEmpty ? nil : names.joined(separator: L("、", ", "))
     }
 
