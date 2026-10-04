@@ -86,6 +86,10 @@ final class AppSettings: ObservableObject {
     @Published var openAIKey: String { didSet { Keychain.save(openAIKey, for: "openai") } }
     @Published var anthropicKey: String { didSet { Keychain.save(anthropicKey, for: "anthropic") } }
     @Published var jevKey: String { didSet { Keychain.save(jevKey, for: "typesafe") } }
+    /// 用 deAPI 把语音转成文字（云端，按量计费）。默认关闭；打开后语音提示上多一个「听这条语音」。
+    @Published var deapiEnabled: Bool { didSet { defaults.set(deapiEnabled, forKey: "deapiEnabled") } }
+    @Published var deapiModel: String { didSet { defaults.set(deapiModel, forKey: "deapiModel") } }
+    @Published var deapiKey: String { didSet { Keychain.save(deapiKey, for: "deapi") } }
     @Published var relationship: String { didSet { defaults.set(relationship, forKey: "relationship") } }
     @Published var interval: Double { didSet { defaults.set(interval, forKey: "interval") } }
     /// 分析时参考联系人记忆；把分析结果自动记进联系人记忆。
@@ -122,6 +126,9 @@ final class AppSettings: ObservableObject {
         openAIKey = Keychain.read("openai")
         anthropicKey = Keychain.read("anthropic")
         jevKey = Keychain.read("typesafe")
+        deapiEnabled = defaults.bool(forKey: "deapiEnabled")
+        deapiModel = defaults.string(forKey: "deapiModel") ?? DeAPITranscriber.defaultModel
+        deapiKey = Keychain.read("deapi")
         relationship = defaults.string(forKey: "relationship") ?? "不确定"
         interval = defaults.object(forKey: "interval") as? Double ?? 1.5
         autoStartOllama = defaults.object(forKey: "autoStartOllama") as? Bool ?? true
@@ -146,7 +153,8 @@ final class AppSettings: ObservableObject {
     /// 所有会收到聊天内容的云端服务（大模型和 Jev），全在本机时为 nil。界面据此提示消息会不会发出去。
     var cloudProviderName: String? {
         let names = [engine != .systemOne ? llmCloudName : nil,
-                     engine != .llm && systemOneProvider == .jev ? L("TypeSafe（Jev）", "TypeSafe (Jev)") : nil].compactMap { $0 }
+                     engine != .llm && systemOneProvider == .jev ? L("TypeSafe（Jev）", "TypeSafe (Jev)") : nil,
+                     deapiEnabled ? L("deAPI（你点「听这条语音」时）", "deAPI (when you tap Listen)") : nil].compactMap { $0 }
         return names.isEmpty ? nil : names.joined(separator: L("、", ", "))
     }
 
@@ -209,5 +217,17 @@ final class AppSettings: ObservableObject {
             throw AnalyzerError.badResponse(L("地址格式不对：\(text)", "That URL doesn't look right: \(text)"))
         }
         return url
+    }
+
+    /// 打开了「用 deAPI 听语音」并且填了密钥。测试和录演示时可以用环境变量 EMOLENS_DEAPI_KEY（不写进钥匙串）。
+    var canListenToVoice: Bool {
+        (deapiEnabled && !deapiKey.isEmpty) || ProcessInfo.processInfo.environment["EMOLENS_DEAPI_KEY"] != nil
+    }
+
+    /// EMOLENS_DEAPI_URL 可以指向别的兼容地址（测试用）。
+    var transcriber: DeAPITranscriber {
+        let env = ProcessInfo.processInfo.environment
+        return DeAPITranscriber(apiKey: env["EMOLENS_DEAPI_KEY"] ?? deapiKey, model: deapiModel,
+                                baseURL: env["EMOLENS_DEAPI_URL"].flatMap(URL.init(string:)) ?? DeAPITranscriber.defaultURL)
     }
 }

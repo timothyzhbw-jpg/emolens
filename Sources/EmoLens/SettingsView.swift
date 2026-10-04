@@ -10,6 +10,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var windows: [WindowOption] = []
     @State private var check: CheckState = .idle
+    @State private var deapiCheck: CheckState = .idle
 
     enum CheckState: Equatable { case idle, checking, ok(String), failed(String) }
 
@@ -104,6 +105,30 @@ struct SettingsView: View {
                     Text(L("对方发表情、表情包时，把那一小块截图交给分析模型看（每条多约 1 秒）。模型不支持看图时自动跳过，只按「[表情]」分析。用云端模型时，这块截图也会发送给服务商。",
                            "When they send an emoji or sticker, that small crop is shown to the model (about 1 extra second). Skipped if the model can't read images. With a cloud model, the crop is sent to the provider too."))
                         .font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+
+                Section {
+                    Toggle(L("用 deAPI 听语音（云端）", "Listen to voice messages with deAPI (cloud)"), isOn: $settings.deapiEnabled)
+                    if settings.deapiEnabled {
+                        SecureField("deAPI API Key", text: $settings.deapiKey, prompt: Text("dpn-sk-…"))
+                        TextField(L("模型", "Model"), text: $settings.deapiModel, prompt: Text(DeAPITranscriber.defaultModel))
+                        HStack {
+                            Button(L("测试 deAPI", "Test deAPI")) { Task { await testDeAPI() } }
+                                .disabled(settings.deapiKey.isEmpty || deapiCheck == .checking)
+                            switch deapiCheck {
+                            case .idle: EmptyView()
+                            case .checking: Text(L("连接中…", "Connecting…")).foregroundStyle(.secondary)
+                            case .ok(let text): Label(text, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                            case .failed(let text): Label(text, systemImage: "xmark.octagon.fill").foregroundStyle(.red)
+                            }
+                        }
+                    }
+                } header: {
+                    Text(L("语音消息", "Voice messages"))
+                } footer: {
+                    Text(L("打开后，对方发来语音时面板上会多一个「听这条语音」：你在聊天软件里播放它，EmoLens 只录那个软件的声音，交给 deAPI 上的 Whisper 转成文字再分析。只在你点了才会录、才会发送；录音转完就删。deAPI 按音频时长计费，API Key 只保存在本机钥匙串里。",
+                           "When on, voice-message notices get a Listen button: play the message in your messaging app and EmoLens records only that app's sound, has Whisper on deAPI transcribe it, then analyzes the text. Nothing is recorded or sent unless you tap Listen, and the recording is deleted afterwards. deAPI bills by audio length; the API key stays in your Keychain."))
+                        .font(.system(size: 11)).foregroundStyle(settings.deapiEnabled ? Color.orange : Color.secondary)
                 }
 
                 Section {
@@ -274,6 +299,24 @@ struct SettingsView: View {
         let data = try await get(base, path: path)
         let list = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?[key] as? [[String: Any]]
         return list?.compactMap { $0[field] as? String } ?? []
+    }
+
+    /// 查一下 deAPI 的模型列表：密钥对不对、选的模型在不在。不转写，不花钱。
+    private func testDeAPI() async {
+        deapiCheck = .checking
+        do {
+            let data = try await get(DeAPITranscriber.defaultURL.absoluteString, path: "models",
+                                     headers: ["Authorization": "Bearer \(settings.deapiKey)"])
+            let ids = ((try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["data"] as? [[String: Any]])?
+                .compactMap { $0["id"] as? String } ?? []
+            let model = settings.deapiModel.isEmpty ? DeAPITranscriber.defaultModel : settings.deapiModel
+            deapiCheck = ids.contains(model) ? .ok(L("deAPI 连接正常", "deAPI is reachable"))
+                : .failed(L("账号里没有模型 \(model)", "Model \(model) isn't available on this account"))
+        } catch let error as AnalyzerError {
+            deapiCheck = .failed(error.localizedDescription)
+        } catch {
+            deapiCheck = .failed(L("连不上：", "Can't connect: ") + error.localizedDescription)
+        }
     }
 
     private func get(_ base: String, path: String, headers: [String: String] = [:]) async throws -> Data {

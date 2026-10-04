@@ -119,6 +119,43 @@ final class BackendTests: XCTestCase {
         XCTAssertEqual(analyzer.name, "本地大模型 · qwen3.5:4b + 决策模型 · Jev（jev-latest）")
     }
 
+    // MARK: deAPI 语音转文字
+
+    func testDeAPISendsAudioAsMultipartWithBearerKey() async throws {
+        respond(#"{"text": "  so what time are you actually coming home  "}"#)
+        let audio = Data([0x52, 0x49, 0x46, 0x46, 0x01, 0x02])
+        let text = try await DeAPITranscriber(apiKey: "dpn-sk-test|abc").transcribe(audio)
+        XCTAssertEqual(text, "so what time are you actually coming home")
+        XCTAssertEqual(MockURLProtocol.lastRequest?.url?.absoluteString, "https://oai.deapi.ai/v1/audio/transcriptions")
+        XCTAssertEqual(header("Authorization"), "Bearer dpn-sk-test|abc")
+        XCTAssertTrue(header("Content-Type")?.hasPrefix("multipart/form-data; boundary=") == true)
+        let body = MockURLProtocol.lastBody
+        XCTAssertNotNil(body.range(of: Data("name=\"model\"\r\n\r\nWhisperLargeV3\r\n".utf8)))
+        XCTAssertNotNil(body.range(of: Data("filename=\"voice.wav\"".utf8)))
+        XCTAssertNotNil(body.range(of: audio), "音频原样上传")
+        XCTAssertNil(body.range(of: Data("name=\"language\"".utf8)), "不指定语言，让 Whisper 自己判断")
+    }
+
+    func testDeAPISilenceIsEmptyNotError() async throws {
+        respond(#"{"text": ""}"#)
+        let text = try await DeAPITranscriber(apiKey: "k").transcribe(Data([1]))
+        XCTAssertEqual(text, "")
+    }
+
+    func testDeAPIErrorMessageIsReadable() async {
+        respond(#"{"error": {"message": "Invalid API token", "code": "invalid_api_key"}}"#, status: 401)
+        do {
+            _ = try await DeAPITranscriber(apiKey: "wrong").transcribe(Data([1]))
+            XCTFail("401 应当报错")
+        } catch AnalyzerError.http(let service, let status, let detail) {
+            XCTAssertEqual(service, "deAPI")
+            XCTAssertEqual(status, 401)
+            XCTAssertEqual(detail, "Invalid API token")
+        } catch {
+            XCTFail("\(error)")
+        }
+    }
+
     // MARK: 图片（看表情、表情包）
 
     private let imageTurn = [ChatTurn(role: "user", content: "这是什么表情", images: [Data([0x89, 0x50])])]

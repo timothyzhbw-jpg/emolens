@@ -46,7 +46,7 @@ struct PanelView: View {
 
     private var content: some View {
         VStack(spacing: 12) {
-            Notices(monitor: monitor)
+            Notices(monitor: monitor, settings: settings)
             if settings.manualMode {
                 ManualView(monitor: monitor, settings: settings, transcript: $monitor.manualTranscript, editable: scrolls)
             }
@@ -587,6 +587,16 @@ struct HistoryRow: View {
 
 struct Notices: View {
     @ObservedObject var monitor: Monitor
+    @ObservedObject var settings: AppSettings
+
+    /// 语音提示：开了 deAPI 就告诉用户可以直接听；没开就请他在聊天软件里转文字。
+    private var voiceHint: String {
+        settings.canListenToVoice
+            ? L("点「听这条语音」，再到聊天软件里播放它：EmoLens 只录那个软件的声音，交给 deAPI 转成文字后接着分析。也可以在聊天软件里直接转文字。",
+                "Tap Listen, then play it in your messaging app: EmoLens records only that app's sound, has deAPI transcribe it, and analyzes the text. You can also convert it to text in the app.")
+            : L("EmoLens 听不到语音内容。在聊天软件里把它转成文字（通常是右键语音 →「转文字」），转好后会自动接着分析；或者在设置里打开「用 deAPI 听语音」。",
+                "EmoLens can't hear audio. Transcribe it in your messaging app (usually right-click the voice message → Convert to Text) and analysis will continue automatically, or turn on \"Listen with deAPI\" in Settings.")
+    }
 
     var body: some View {
         if monitor.status == .needsPermission {
@@ -617,8 +627,9 @@ struct Notices: View {
         if let seconds = monitor.pendingVoice {
             Notice(symbol: "waveform", tint: .blue,
                    title: seconds > 0 ? L("对方发来一条 \(seconds) 秒的语音", "They sent a \(seconds)-second voice message") : L("对方发来一条语音", "They sent a voice message"),
-                   text: L("EmoLens 听不到语音内容。在聊天软件里把它转成文字（通常是右键语音 →「转文字」），转好后会自动接着分析。",
-                           "EmoLens can't hear audio. Transcribe it in your messaging app (usually right-click the voice message → Convert to Text) and analysis will continue automatically.")) { EmptyView() }
+                   text: voiceHint) {
+                if settings.canListenToVoice { VoiceListenControls(monitor: monitor) }
+            }
         }
         if let error = monitor.analysisError {
             Notice(symbol: "bolt.horizontal.circle", tint: .orange, title: L("这条消息没分析成功", "Couldn't analyze this message"), text: error) {
@@ -745,3 +756,37 @@ struct BubbleShape: Shape {
         return path
     }
 }
+
+/// 语音提示里的「听这条语音」：录音中显示倒计时和停止按钮，转写中显示进度。
+struct VoiceListenControls: View {
+    @ObservedObject var monitor: Monitor
+
+    var body: some View {
+        switch monitor.listenState {
+        case .idle:
+            Button {
+                monitor.startListening()
+            } label: {
+                Label(L("听这条语音（deAPI）", "Listen (deAPI)"), systemImage: "ear")
+            }
+            .buttonStyle(PillButtonStyle(tint: .blue))
+        case .recording(let limit):
+            HStack(spacing: 8) {
+                Image(systemName: "record.circle").foregroundStyle(.red)
+                Text(L("正在听，最多 \(limit) 秒：现在去聊天软件里点开这条语音", "Listening for up to \(limit) s — play the voice message now"))
+                    .font(.system(size: 11.5)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(L("听完了", "Done")) { Task { await monitor.finishListening() } }
+                    .buttonStyle(PillButtonStyle(tint: .blue))
+                Button(L("取消", "Cancel")) { monitor.cancelListening() }
+                    .buttonStyle(PillButtonStyle(tint: .secondary))
+            }
+        case .transcribing:
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(L("deAPI 正在转文字…", "deAPI is transcribing…")).font(.system(size: 11.5)).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+

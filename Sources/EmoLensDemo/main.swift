@@ -2,7 +2,48 @@
 // 运行：swift run EmoLensDemo（每 DEMO_INTERVAL 秒收到一条新消息，默认 15 秒）
 // 英文对话：swift run EmoLensDemo --language en（或 EMOLENS_LANGUAGE=en；系统语言不是中文时默认英文）
 import AppKit
+import AVFoundation
 import SwiftUI
+
+/// 播放语音消息：先把这条语音的内容合成成音频，再由演示程序自己播放。
+/// 不直接用 speak()：那样声音可能由系统的朗读服务播放，EmoLens 只录这个程序的声音时会录不到。
+@MainActor
+enum VoicePlayer {
+    static let synthesizer = AVSpeechSynthesizer()
+    static let engine = AVAudioEngine()
+    static let player = AVAudioPlayerNode()
+    static var connected = false
+
+    final class Collected: @unchecked Sendable { var buffers: [AVAudioPCMBuffer] = [] }
+
+    static func play(_ text: String) {
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = AVSpeechSynthesisVoice(language: english ? "en-US" : "zh-CN")
+        let collected = Collected()
+        synthesizer.write(utterance) { buffer in
+            guard let pcm = buffer as? AVAudioPCMBuffer else { return }
+            if pcm.frameLength > 0 {
+                collected.buffers.append(pcm)
+            } else {
+                let buffers = collected.buffers   // 长度为 0 的缓冲表示合成完了
+                Task { @MainActor in schedule(buffers) }
+            }
+        }
+    }
+
+    private static func schedule(_ buffers: [AVAudioPCMBuffer]) {
+        guard let format = buffers.first?.format else { return }
+        if !connected {
+            engine.attach(player)
+            engine.connect(player, to: engine.mainMixerNode, format: format)
+            connected = true
+        }
+        if !engine.isRunning { try? engine.start() }
+        player.stop()
+        for buffer in buffers { player.scheduleBuffer(buffer) }
+        player.play()
+    }
+}
 
 /// 和 EmoLens 一样的规则：--language > EMOLENS_LANGUAGE > 系统语言。
 let english: Bool = {
@@ -45,7 +86,7 @@ enum Step {
 let script: [Step] = english ? [
     .add([Line(fromMe: false, text: "no it's fine, work is obviously more important. who am i anyway")]),
     .add([Line(fromMe: true, text: "don't be like that, I'll be home by 10 I promise"), Line(fromMe: false, text: "ok 🙂")]),
-    .add([Line(fromMe: false, text: "", kind: .voice(6))]),
+    .add([Line(fromMe: false, text: "so what time are you actually coming home, I'm literally falling asleep waiting", kind: .voice(6))]),
     .transcribe("so what time are you actually coming home, I'm literally falling asleep waiting"),
     .add([Line(fromMe: true, text: "got you a slice from your favorite bakery"), Line(fromMe: false, text: "hmph", kind: .sticker)]),
     .add([Line(fromMe: false, text: "oh btw my birthday is next wednesday, don't you dare forget 😘")]),
@@ -53,7 +94,7 @@ let script: [Step] = english ? [
 ] : [
     .add([Line(fromMe: false, text: "没关系呀，你工作最重要嘛，我算什么")]),
     .add([Line(fromMe: true, text: "别这样嘛，我十点前一定回来"), Line(fromMe: false, text: "好的🙂")]),
-    .add([Line(fromMe: false, text: "", kind: .voice(6))]),
+    .add([Line(fromMe: false, text: "那你到底几点回来啊，我都等困了", kind: .voice(6))]),
     .transcribe("那你到底几点回来啊，我都等困了"),
     .add([Line(fromMe: true, text: "给你带了你最爱的那家蛋糕"), Line(fromMe: false, text: "哼", kind: .sticker)]),
     .add([Line(fromMe: false, text: "对了，下周三是我生日，你可别忘了哦😘")]),
@@ -70,6 +111,14 @@ final class Conversation: ObservableObject {
         switch script[step] {
         case .add(let new):
             lines += new
+            // DEMO_AUTOPLAY_VOICE=1：收到语音两秒后自动播放（测试和录演示时不用点）
+            if ProcessInfo.processInfo.environment["DEMO_AUTOPLAY_VOICE"] == "1",
+               let voice = new.first(where: { if case .voice = $0.kind { true } else { false } }) {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(2))
+                    VoicePlayer.play(voice.text)
+                }
+            }
         case .transcribe(let text):
             if let index = lines.lastIndex(where: { if case .voice = $0.kind { true } else { false } }) {
                 lines[index].transcript = text
@@ -143,6 +192,8 @@ struct Bubble: View {
             .padding(.horizontal, 12).padding(.vertical, 9)
             .frame(width: 70 + CGFloat(seconds) * 3, alignment: .leading)
             .background(fill, in: RoundedRectangle(cornerRadius: 5))
+            .contentShape(Rectangle())
+            .onTapGesture { VoicePlayer.play(line.text) }   // 点语音气泡 = 播放
         case .sticker:
             VStack(spacing: 6) {
                 ZStack {

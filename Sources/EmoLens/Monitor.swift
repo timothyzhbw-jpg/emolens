@@ -34,6 +34,11 @@ final class Monitor: ObservableObject {
     @Published private(set) var windowName = ""
     /// 对方最新一条是还没转文字的语音（秒数，读不出时长时为 0）。转成文字之前没有内容可分析。
     @Published private(set) var pendingVoice: Int?
+    /// 用 deAPI 听语音的进度。
+    enum ListenState: Equatable { case idle, recording(limit: Int), transcribing }
+    @Published private(set) var listenState: ListenState = .idle
+    private var listener: VoiceListener?
+    private var listenTimeout: Task<Void, Never>?
     /// 本地模型的状态：是否正在启动，以及启动结果。
     @Published private(set) var startingOllama = false
     @Published private(set) var ollamaStatus: OllamaLauncher.Status?
@@ -175,6 +180,7 @@ final class Monitor: ObservableObject {
         loop = nil
         status = .paused
         pendingVoice = nil
+        cancelListening()
     }
 
     /// 换了窗口或区域后，从头开始比对。
@@ -304,6 +310,8 @@ final class Monitor: ObservableObject {
             // 语音还没转文字：只有时长，分析不出东西。提示用户在微信里转文字，转好后画面变了会自动接着分析。
             pendingVoice = voice.seconds ?? 0
             log.notice("latest is an untranscribed voice message (\(voice.seconds ?? 0) s)")
+            // EMOLENS_AUTO_LISTEN=1（测试、录演示用）：不等用户点，直接开始听
+            if ProcessInfo.processInfo.environment["EMOLENS_AUTO_LISTEN"] == "1" { startListening() }
             return
         }
         pendingVoice = nil
@@ -440,6 +448,96 @@ final class Monitor: ObservableObject {
     nonisolated static func png(_ image: CGImage) -> Data? {
         let rep = NSBitmapImageRep(cgImage: image)
         return rep.representation(using: .png, properties: [:])
+    }
+
+    // MARK: - 用 deAPI 听语音
+
+    /// 开始听对方刚发的语音：录聊天软件发出的声音，用户在聊天软件里点开语音播放；
+    /// 录够时长（或用户点「停止」）后交给 deAPI 转成文字，再像普通消息一样分析。
+    func startListening() {
+        guard listenState == .idle, settings.canListenToVoice, let seconds = pendingVoice else { return }
+        Task { await beginListening(seconds: seconds) }
+    }
+
+    private func beginListening(seconds: Int) async {
+        do {
+            guard let window = cachedWindow, let owner = window.owningApplication else {
+                throw RecorderError(L("还没找到聊天窗口", "No chat window yet"))
+            }
+            let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false)
+            guard let display = content.displays.first(where: { $0.frame.intersects(window.frame) }) ?? content.displays.first,
+                  let app = content.applications.first(where: { $0.processID == owner.processID }) else {
+                throw RecorderError(L("找不到聊天软件", "Couldn't find the messaging app"))
+            }
+            let url = FileManager.default.temporaryDirectory.appending(path: "emolens-voice-\(UUID().uuidString).wav")
+            let listener = VoiceListener(url: url)
+            try await listener.start(app: app, display: display)
+            self.listener = listener
+            // 语音多长就录多久，留几秒给用户去点播放；读不出时长时录 40 秒（用户也可以随时点停止）
+            let limit = seconds > 0 ? min(seconds + 6, 66) : 40
+            listenState = .recording(limit: limit)
+            analysisError = nil
+            listenTimeout = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(limit))
+                guard !Task.isCancelled else { return }
+                // 另起一个任务：finishListening 会取消 listenTimeout，不能让它在 listenTimeout 自己里面跑，
+                // 否则上传请求跟着被取消（URLError -999）
+                Task { await self?.finishListening() }
+            }
+        } catch {
+            analysisError = L("没能开始听：", "Couldn't start listening: ") + error.localizedDescription
+            listenState = .idle
+        }
+    }
+
+    /// 放弃这次录音，不发给 deAPI。
+    func cancelListening() {
+        guard case .recording = listenState, let listener else { return }
+        listenTimeout?.cancel()
+        listenTimeout = nil
+        self.listener = nil
+        listenState = .idle
+        Task {
+            let recording = await listener.stop()
+            try? FileManager.default.removeItem(at: recording.url)
+        }
+    }
+
+    /// 停止录音，交给 deAPI 转文字。
+    func finishListening() async {
+        guard case .recording = listenState, let listener else { return }
+        listenTimeout?.cancel()
+        listenTimeout = nil
+        self.listener = nil
+        listenState = .transcribing
+        let recording = await listener.stop()
+        defer {
+            try? FileManager.default.removeItem(at: recording.url)   // 录音不留在本机
+            listenState = .idle
+        }
+        guard recording.heardSomething, let audio = try? Data(contentsOf: recording.url) else {
+            analysisError = L("没听到声音：点「听这条语音」之后，再到聊天软件里点开这条语音播放。",
+                              "Didn't hear anything: after tapping Listen, play the voice message in your messaging app.")
+            return
+        }
+        do {
+            let start = Date()
+            // 不指定语言：Whisper 自己判断，中英文聊天都能用
+            let text = try await settings.transcriber.transcribe(audio)
+            log.notice("deAPI transcribed \(String(format: "%.1f", recording.seconds), privacy: .public) s of audio in \(Int(Date().timeIntervalSince(start) * 1000)) ms")
+            guard !text.isEmpty else {
+                analysisError = L("deAPI 没听出说了什么，可能录到的只是背景声。", "deAPI didn't hear any words; it may have only caught background sound.")
+                return
+            }
+            let seconds = pendingVoice
+            pendingVoice = nil
+            let message = ChatMessage(speaker: .them, text: Placeholder.transcript + " " + text, top: 0,
+                                      attachment: Attachment(kind: .voice, seconds: seconds == 0 ? nil : seconds, transcribed: true))
+            enqueue(message, images: [])
+        } catch {
+            log.error("deAPI transcription failed: \(Self.category(error), privacy: .public)")
+            analysisError = error.localizedDescription
+        }
     }
 
     /// 仅当设置了环境变量 EMOLENS_LOG 时，把结果追加写进该文件（调试用，默认不落盘）。
