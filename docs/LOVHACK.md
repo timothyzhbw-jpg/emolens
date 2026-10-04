@@ -77,9 +77,11 @@ Swift, SwiftUI, ScreenCaptureKit, Apple Vision, Ollama, Qwen 3.5, Anthropic Clau
 ### Links
 
 - Code: https://github.com/timothyzhbw-jpg/emolens
-- Demo video: *(add your link)*
+- Demo video (2–3 min, public or unlisted): *(add your link)*
 
-## Demo video script (about 2 minutes)
+## Demo video script (2–3 minutes; LovHack requires 2–3 min)
+
+Most of the video should show the product itself, not slides.
 
 1. **Hook (10 s).** A chat on screen with Mia: "no it's fine, work is obviously more important. who am i anyway". Voice-over: "Is this fine? It's not."
 2. **Setup (15 s).** `swift run EmoLensDemo --language en` and open EmoLens. Point at "Analyzed on this Mac only, nothing uploaded".
@@ -92,7 +94,8 @@ Swift, SwiftUI, ScreenCaptureKit, Apple Vision, Ollama, Qwen 3.5, Anthropic Clau
 
 - [ ] Every team member meets the eligibility rules (LovHack Season 3 is for students aged 13–24; teams of 1–4).
 - [ ] Devpost form filled from the sections above, **including the disclosure section**.
-- [ ] Demo video recorded (script above) and linked.
+- [ ] Demo video recorded (script above), **between 2 and 3 minutes**, uploaded as public or unlisted (judges must be able to watch it without requesting access), and linked.
+- [ ] "Built with" / technologies list filled in (copy from above).
 - [ ] Repository link added; this branch merged to `main` so judges see the English README.
 - [ ] Optional: a 0.6.0 DMG built on a Mac (`./scripts/make_dmg.sh`, with `VERSION` bumped in `scripts/build_app.sh`) and published under Releases, so judges can try it without building.
 - [ ] Optional: with your Adaption credits, run `python3 scripts/adaption_localize_eval.py estimate`, then `run`, and add the localized results to the README.
