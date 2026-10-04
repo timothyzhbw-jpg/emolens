@@ -72,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var panel: NSPanel?
     private var statusItem: NSStatusItem?
     private var languageChange: AnyCancellable?
+    private var demoRecorder: AnyObject?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = Self.makeMenu()
@@ -99,7 +100,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // 跟着你走：切到别的桌面空间、或别的应用全屏时，面板都要跟过去。
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         panel.isReleasedWhenClosed = false
-        panel.sharingType = .none   // 自己的面板不出现在任何截图 / 共享屏幕里
+        // 自己的面板不出现在任何截图 / 共享屏幕里；录演示视频时例外，否则录不到面板
+        panel.sharingType = DemoRecording.requested == nil ? .none : .readOnly
         panel.contentView = Self.frosted(NSHostingView(rootView: PanelView(monitor: monitor, settings: settings)))
         if let screen = NSScreen.main?.visibleFrame {
             panel.setFrameOrigin(NSPoint(x: screen.maxX - 392, y: screen.maxY - 720))
@@ -110,6 +112,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         showPanel()
         if !settings.manualMode { monitor.start() }
         monitor.warmUpLocalModel()
+        if let output = DemoRecording.requested, #available(macOS 15, *) {
+            let recorder = DemoRecorder(output: output, monitor: monitor, settings: settings, panel: panel)
+            demoRecorder = recorder
+            Task { await recorder.run() }
+        }
     }
 
     /// 把面板显示出来并置前。被隐藏过（⌘H）也能恢复，所以不会出现「应用在跑但看不到窗口」。

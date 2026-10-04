@@ -30,14 +30,15 @@ enum WindowCapture {
 
     /// 指定了窗口就只找它（不偷偷换成别的窗口）；没指定时取最大的微信窗口。
     static func find(id: CGWindowID) async throws -> Lookup {
-        let all = try await windows()
         if id != 0 {
-            if let window = all.first(where: { $0.windowID == id }) {
+            // 用户明确选了这个窗口：不管它在哪个层级（比如设成了浮在最上层）都认
+            let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false)
+            if let window = content.windows.first(where: { $0.windowID == id && $0.frame.width > 240 && $0.frame.height > 240 }) {
                 return window.isOnScreen ? .found(window) : .hidden(name(of: window))
             }
-            let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false)
             return content.windows.first { $0.windowID == id }.map { .hidden(name(of: $0)) } ?? .missing
         }
+        let all = try await windows()
         // 按优先级找第一个有窗口在屏幕上的聊天软件，取它最大的窗口
         var hidden: SCWindow?
         for app in chatApps {

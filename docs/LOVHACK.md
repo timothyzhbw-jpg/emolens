@@ -16,7 +16,8 @@ LovHack asks entrants to say clearly what was created during the event and to di
 4. **English chat formats.** Paste mode now understands English export formats (timestamped `[date, time] Name: text`, `Name — Today at 9:41 PM`, Delivered/Read lines), and OCR prefers English when the app is in English.
 5. **An English evaluation set and scorer.** 45 labeled chats in [`eval/en.jsonl`](../eval/en.jsonl), with hard negatives (hyperbole that must *not* be flagged, ordinary hurt that is *not* manipulation), and [`scripts/score_eval.py`](../scripts/score_eval.py).
 6. **Adaption Labs integration.** [`scripts/adaption_localize_eval.py`](../scripts/adaption_localize_eval.py) uses the Adaption Adaptive Data API (`datasets.create` → `localize` → `download`) to rewrite the eval set into British, Australian, Indian and Canadian English while keeping the labels, so we can measure whether EmoLens still catches sarcasm and warning signs across Englishes. An `estimate` mode quotes the credit cost before anything is spent.
-7. **CI that renders the UI.** GitHub Actions now builds, runs the 126 unit tests (16 new for the English pipeline) and renders every panel state in both languages on macOS. The English screenshots in the README come from there.
+7. **A demo recorder.** `EMOLENS_RECORD=demo.mov` records only the demo chat window and the EmoLens panel with ScreenCaptureKit (nothing else on screen), while a script plays the conversation and the paste-mode examples. The demo video was recorded with it.
+8. **CI that renders the UI.** GitHub Actions now builds, runs the 126 unit tests (16 new for the English pipeline) and renders every panel state in both languages on macOS. The English screenshots in the README come from there.
 
 ## Devpost form
 
@@ -57,7 +58,7 @@ It reads emoji, stickers and voice-message transcripts, not just text. There's a
 ### Accomplishments that we're proud of
 
 - The full English version passed the macOS build and all 126 unit tests on its first CI run.
-- On the new English eval set, the keyword nets alone catch 5/6 crisis messages and 3/3 scams with **zero** false positives on hyperbole and normal chat (the nets were written alongside the set, so this is a sanity check rather than a benchmark).
+- On the new English eval set, the full pipeline with the local 4B model got the emotion right 76% of the time (29/38), caught 5/6 crisis messages and 3/3 scams, and raised **zero** false alarms across 22 checks on hyperbole, ordinary hurt and normal chat. It is weakest on quiet signals: cold, distant replies (0/3) and manipulation dressed up as affection (2/5).
 - It's private by default: no chat ever leaves the Mac unless you choose a cloud model.
 
 ### What we learned

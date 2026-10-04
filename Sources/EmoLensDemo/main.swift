@@ -172,7 +172,13 @@ final class DemoDelegate: NSObject, NSApplicationDelegate {
                               styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         window.title = english ? "EmoLens Demo Chat" : "EmoLens 演示聊天"
         window.contentView = NSHostingView(rootView: ChatView(conversation: conversation))
+        // DEMO_ON_TOP=1（录演示视频用）：跟到当前桌面空间、浮在别的应用的全屏画面之上，保证录得到
+        if ProcessInfo.processInfo.environment["DEMO_ON_TOP"] == "1" {
+            window.level = .floating
+            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        }
         window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
         self.window = window
         NSApp.activate()
         print("EmoLensDemo windowID=\(window.windowNumber)")

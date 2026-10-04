@@ -44,6 +44,8 @@ final class Monitor: ObservableObject {
     @Published private(set) var detectedContact: String?
     /// 用户手动设置的名字，只对当前这个聊天有效。
     @Published var manualContact: String?
+    /// 手动模式里粘贴的聊天记录（录演示视频时由脚本填入）。
+    @Published var manualTranscript = ""
     /// 记忆有改动时加一，让界面刷新。
     @Published private(set) var memoryVersion = 0
     private var tracker = MessageTracker()

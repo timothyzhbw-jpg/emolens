@@ -131,9 +131,18 @@ Two keyword nets work with every engine, because small models miss things that m
 | Set | What's in it |
 |---|---|
 | [`eval/en.jsonl`](eval/en.jsonl) | 45 hand-written English chats with expected labels: crisis messages, hyperbole that must **not** be flagged, manipulation vs. ordinary hurt, sarcasm, playful sulking, holding back, cold replies, breakup signals, impersonation scams, normal chat, and things worth remembering. None overlap with the prompt's examples |
-| Chinese set (44 items) | Measured with `qwen3.5:4b`: self-harm 5/5 and manipulation 5/5 with no false positives; sarcasm is the weakest at 2/5. Details in the [Chinese README](README.zh-CN.md) |
+| Chinese set (44 items) | Measured with `qwen3.5:4b`: emotion 64% (26% if you always guess the most common), self-harm 5/5 with no false positives, manipulation 3–5/5 across repeated runs (the small model samples with some randomness); sarcasm is the weakest at 2–3/5. Details in the [Chinese README](README.zh-CN.md) |
 
-On the English set, the keyword nets alone (no model) catch 5/6 crisis messages and 3/3 scams, with 0 false positives on the hyperbole and ordinary-message items. The nets were written alongside this set, so treat that as a sanity check, not a benchmark. Run the full pipeline yourself:
+**Full pipeline on the English set** (local `qwen3.5:4b` on an Apple-silicon Mac, Oct 3, 2026, one run):
+
+| Check | Result |
+|---|---|
+| Emotion category | 29/38 (76%) |
+| Signals that must stay **off** (hyperbole, ordinary hurt, normal chat) | 22/22: no false positives |
+| Signals that must be raised | 16/24 (67%): self-harm 5/6, money or account codes 3/3, upset with you 2/2, fight or breakup 2/2, needs comfort 2/2, manipulation 2/5, pulling away 0/3, brushing you off 0/1 |
+| Literal vs. real meaning (sarcastic, playful, holding back) | 8/13 (62%); sarcasm items fully right 2/5 |
+
+The small local model is cautious: it raised nothing it shouldn't, but it misses the quieter signals, such as cold, distant replies and manipulation dressed up as affection. Those are the cases where a cloud model or the decision-model double-check helps. The keyword nets alone (no model) catch 5/6 crisis messages and 3/3 scams; they were written alongside this set, so treat that part as a sanity check, not a benchmark. Run it yourself:
 
 ```bash
 swift run EmoLens --eval eval/en.jsonl results.jsonl --language en

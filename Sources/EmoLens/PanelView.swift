@@ -11,7 +11,6 @@ struct PanelView: View {
     @State private var memoryContact: String?
     @State private var selectedID: UUID?
     @State private var handledSuggestions: Set<UUID> = []
-    @State private var transcript = ""
 
     private var shown: EmotionReport? {
         monitor.reports.first { $0.id == selectedID } ?? monitor.reports.first
@@ -49,7 +48,7 @@ struct PanelView: View {
         VStack(spacing: 12) {
             Notices(monitor: monitor)
             if settings.manualMode {
-                ManualView(monitor: monitor, settings: settings, transcript: $transcript, editable: scrolls)
+                ManualView(monitor: monitor, settings: settings, transcript: $monitor.manualTranscript, editable: scrolls)
             }
             if let report = shown {
                 ReportView(report: report,
