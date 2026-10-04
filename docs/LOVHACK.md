@@ -15,9 +15,9 @@ LovHack asks entrants to say clearly what was created during the event and to di
 3. **English safety nets.** Crisis-language patterns tuned to catch passive warning signs ("I'm just a burden", "everyone would be better off if I wasn't around") while **ignoring everyday hyperbole** ("I'm dead 💀", "kill me now"). Scam patterns cover loans, one-time codes and gift cards. The crisis card shows US resources (988, Crisis Text Line) and findahelpline.com.
 4. **English chat formats.** Paste mode now understands English export formats (timestamped `[date, time] Name: text`, `Name — Today at 9:41 PM`, Delivered/Read lines), and OCR prefers English when the app is in English.
 5. **An English evaluation set and scorer.** 45 labeled chats in [`eval/en.jsonl`](../eval/en.jsonl), with hard negatives (hyperbole that must *not* be flagged, ordinary hurt that is *not* manipulation), and [`scripts/score_eval.py`](../scripts/score_eval.py).
-6. **Adaption Labs integration.** [`scripts/adaption_localize_eval.py`](../scripts/adaption_localize_eval.py) uses the Adaption Adaptive Data API (`datasets.create` → `localize` → `download`) to rewrite the eval set into British, Australian, Indian and Canadian English while keeping the labels, so we can measure whether EmoLens still catches sarcasm and warning signs across Englishes. An `estimate` mode quotes the credit cost before anything is spent.
+6. **Adaption Labs integration.** [`scripts/adaption_localize_eval.py`](../scripts/adaption_localize_eval.py) uses the Adaption Adaptive Data API (`datasets.create` → `localize` → `download`) to rewrite the eval set into British, Australian, Indian and Canadian English while keeping the labels, so we can measure whether EmoLens still catches sarcasm and warning signs across Englishes. An `estimate` mode quotes the credit cost before anything is spent. (The script is ready; we haven't spent the credits to run it yet.)
 7. **A demo recorder.** `EMOLENS_RECORD=demo.mov` records only the demo chat window and the EmoLens panel with ScreenCaptureKit (nothing else on screen), while a script plays the conversation and the paste-mode examples. The demo video was recorded with it.
-8. **CI that renders the UI.** GitHub Actions now builds, runs the 126 unit tests (16 new for the English pipeline) and renders every panel state in both languages on macOS. The English screenshots in the README come from there.
+8. **CI that renders the UI.** GitHub Actions now builds, runs the unit tests (131 at submission, including the new English-pipeline tests) and renders every panel state in both languages on macOS. The English screenshots in the README come from there.
 
 ## Devpost form
 
@@ -53,7 +53,7 @@ It reads emoji, stickers and voice-message transcripts, not just text. There's a
 
 - **Hyperbole vs. danger.** "I'm dead 💀" and "I just want it all to stop" look similar to a keyword list. We wrote hard-negative test cases first and only added patterns that pass them.
 - **Two languages, one brain.** Memory, colors and history were built on Chinese labels. Instead of rewriting everything, the English model answers with English labels that map onto the same internal labels, and a unit test checks that the few-shot examples use exactly the same format as the live prompt.
-- **Developing a macOS app from a Linux cloud session.** We couldn't compile locally, so every change was validated by macOS CI, including rendering the screenshots.
+- **Developing a macOS app from a Linux cloud session.** Most of the English version was written in a cloud session that couldn't compile the app, so every change was validated by macOS CI, including rendering the screenshots. The final integration, the eval runs and the demo recording then happened on a Mac, where recording the real demo window turned up two bugs (transparent window corners read as stickers, and a misread voice-message duration) that we fixed in 0.6.1.
 
 ### Accomplishments that we're proud of
 
