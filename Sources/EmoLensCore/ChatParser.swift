@@ -235,6 +235,17 @@ public enum ChatParser {
         return seconds
     }
 
+    /// 声波图标后面跟着时长、引号被 OCR 读成了字母：「))) 6i」「)) 12l」。前面有图标才这样认，免得把普通的「6i」当成语音。
+    private static let iconThenSeconds = try! NSRegularExpression(pattern: #"^[)）》»〉>\]|]{2,}\s*(\d{1,2})\s*["”“″'’‘〃ilI|]{0,2}$"#)
+
+    static func voiceSecondsAfterIcon(_ text: String) -> Int? {
+        let text = text.trimmingCharacters(in: .whitespaces)
+        guard let match = iconThenSeconds.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let digits = Range(match.range(at: 1), in: text), let seconds = Int(text[digits]),
+              (1...60).contains(seconds) else { return nil }
+        return seconds
+    }
+
     /// 语音气泡里只有声波图标时，OCR 会读出「)))」「》」「小))」这类杂字。
     static func isVoiceIconNoise(_ text: String) -> Bool {
         let chars = text.filter { !$0.isWhitespace }
@@ -312,8 +323,8 @@ public enum ChatParser {
                 message = ChatMessage(speaker: speaker, text: body, sender: senders[i], top: Double(block.box.minY),
                                       attachment: Attachment(kind: sticker ? .sticker : .image, box: block.box))
             case .bubble:
-                let voiceLine = lines.firstIndex { voiceSeconds($0.text) != nil }
-                let seconds = voiceLine.flatMap { voiceSeconds(lines[$0].text) } ?? outsideSeconds[i]
+                let voiceLine = lines.firstIndex { voiceSeconds($0.text) != nil || voiceSecondsAfterIcon($0.text) != nil }
+                let seconds = voiceLine.flatMap { voiceSeconds(lines[$0].text) ?? voiceSecondsAfterIcon(lines[$0].text) } ?? outsideSeconds[i]
                 if let seconds {
                     // 语音：去掉时长和声波图标，剩下的字是气泡里直接显示的转文字结果
                     let rest = lines.enumerated().filter { $0.offset != voiceLine && !isVoiceIconNoise($0.element.text) }.map(\.element)

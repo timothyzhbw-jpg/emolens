@@ -250,6 +250,10 @@ final class Monitor: ObservableObject {
     private func process(_ chat: CGImage, frame: CGImage?) async throws {
         guard let current = FrameSignature(chat), current.differs(from: signature) else { return }
         signature = current
+        // 调试：EMOLENS_DUMP_FRAMES=目录 时把每一帧聊天区域截图存下来，方便用 --inspect 离线复查识别
+        if let dir = ProcessInfo.processInfo.environment["EMOLENS_DUMP_FRAMES"], let png = Self.png(chat) {
+            try? png.write(to: URL(fileURLWithPath: dir).appending(path: "frame-\(Int(Date().timeIntervalSince1970 * 1000)).png"))
+        }
         let reading = try await Task.detached(priority: .userInitiated) { try ChatReader.read(chat) }.value
         let messages = reading.messages
         let them = messages.filter { $0.speaker == .them }.count

@@ -96,7 +96,8 @@ public enum LayoutDetector {
 
         let background = dominantColor(image)
         var mask = [Bool](repeating: false, count: w * h)
-        for i in 0..<(w * h) where image.color(i).distance(background) > 3 { mask[i] = true }
+        // 透明的像素（窗口圆角外面、阴影）算背景：截单个窗口时四个角是透明的，不能当成一块图
+        for i in 0..<(w * h) where image.rgba[i * 4 + 3] >= 128 && image.color(i).distance(background) > 3 { mask[i] = true }
         let components = connectedComponents(mask, width: w, height: h)
 
         // 太小的是气泡外面的字（时间、昵称）或者小圆点，交给 OCR。

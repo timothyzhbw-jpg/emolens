@@ -99,6 +99,14 @@ final class LayoutParserTests: XCTestCase {
         XCTAssertEqual(messages.map(\.speaker), [.system, .me])
     }
 
+    func testVoiceDurationMisreadAfterIcon() {
+        // 演示窗口里实测：6" 被读成「))) 6i」
+        let messages = parse([line(")))  6i", 0.14, 0.3, 0.07)], [avatar(0.28), bubble(0.12, 0.28, 0.17)])
+        XCTAssertEqual(messages.map(\.text), ["[语音 6秒]"])
+        XCTAssertNil(ChatParser.voiceSecondsAfterIcon("6i"), "前面没有声波图标就不算")
+        XCTAssertNil(ChatParser.voiceSecondsAfterIcon("))) iphone 6i 很好用"))
+    }
+
     func testVoiceSecondsPattern() {
         XCTAssertEqual(ChatParser.voiceSeconds(#"5""#), 5)
         XCTAssertEqual(ChatParser.voiceSeconds(#"1 12""#), 12, "声波图标读成的 1 不算进时长")

@@ -47,12 +47,14 @@ final class DemoRecorder: NSObject, SCRecordingOutputDelegate {
             }
             // 看演示窗口，框住聊天区域（去掉窗口标题栏和联系人名字那一条）
             settings.engine = .llm   // 演示默认引擎；录完由调用方恢复原来的设置
+            panel.appearance = NSAppearance(named: .aqua)   // 和浅色的演示聊天窗口统一
             settings.windowID = demo.windowID
             settings.region = CGRect(x: 0, y: 0.11, width: 1, height: 0.89)
             monitor.restart()
             if !monitor.isRunning { monitor.start() }
-            placePanel(beside: demo.frame)
-            try await Task.sleep(for: .seconds(1))
+            // 窗口刚打开时有缩放动画，这时读到的位置不准：等它停稳再读一次
+            try await Task.sleep(for: .seconds(2))
+            try await placePanel(besideWindow: demo.windowID)
             try await startRecording(demoID: demo.windowID)
             log.notice("recording started")
 
@@ -93,11 +95,24 @@ final class DemoRecorder: NSObject, SCRecordingOutputDelegate {
     }
 
     /// 面板放在演示窗口右边，顶端对齐。SCWindow 的坐标原点在主屏左上，NSWindow 的在左下。
-    private func placePanel(beside frame: CGRect) {
+    /// 放好后再核对一遍，两个窗口不能叠在一起（叠了就录不清楚聊天内容）。
+    private func placePanel(besideWindow id: CGWindowID) async throws {
         guard let main = NSScreen.screens.first else { return }
-        let top = main.frame.height - frame.minY
-        panel.setFrame(NSRect(x: frame.maxX + 20, y: top - 700, width: 372, height: 700), display: true)
-        panel.orderFrontRegardless()
+        for attempt in 1...3 {
+            let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
+            guard let demo = content.windows.first(where: { $0.windowID == id }) else { return }
+            let frame = demo.frame
+            let top = main.frame.height - frame.minY
+            panel.setFrame(NSRect(x: frame.maxX + 20, y: top - 700, width: 372, height: 700), display: true)
+            panel.orderFrontRegardless()
+            try await Task.sleep(for: .milliseconds(800))
+            let check = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
+            let demoNow = check.windows.first { $0.windowID == id }?.frame ?? frame
+            let panelNow = check.windows.first { $0.windowID == CGWindowID(panel.windowNumber) }?.frame ?? .zero
+            log.notice("place panel (try \(attempt)): demo \(NSStringFromRect(demoNow), privacy: .public), panel \(NSStringFromRect(panelNow), privacy: .public)")
+            if panelNow.minX >= demoNow.maxX { return }
+        }
+        throw RecorderError("面板和演示窗口叠在一起，放不开")
     }
 
     private func startRecording(demoID: CGWindowID) async throws {

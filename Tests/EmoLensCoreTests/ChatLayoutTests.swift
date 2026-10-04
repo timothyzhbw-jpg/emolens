@@ -95,6 +95,20 @@ final class ChatLayoutTests: XCTestCase {
         XCTAssertEqual(blocks.map(\.kind), [.bubble])
     }
 
+    func testTransparentWindowCornersAreBackground() {
+        // 截单个窗口时，圆角外面是透明像素（RGBA 全 0），不能当成两张图
+        var image = draw { c in
+            fill(c, CGRect(x: 56, y: 60, width: 160, height: 36), 1, 1, 1)
+            text(c, x: 68, y: 72, chars: 6)
+        }
+        for y in (height - 30)..<height {
+            for x in 0..<30 { for k in 0..<4 { image.rgba[(y * width + x) * 4 + k] = 0 } }
+            for x in (width - 30)..<width { for k in 0..<4 { image.rgba[(y * width + x) * 4 + k] = 0 } }
+        }
+        let blocks = LayoutDetector.detect(image, textBoxes: [normalized(CGRect(x: 68, y: 72, width: 80, height: 12))])
+        XCTAssertEqual(blocks.map(\.kind), [.bubble])
+    }
+
     func testUnreadTextIsFlagged() {
         let image = draw { c in
             fill(c, CGRect(x: 56, y: 60, width: 200, height: 36), 1, 1, 1)
