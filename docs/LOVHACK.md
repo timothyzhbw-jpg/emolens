@@ -98,7 +98,7 @@ Most of the video should show the product itself, not slides.
 - [ ] Devpost form filled from the sections above, **including the disclosure section**.
 - [x] Demo video recorded (2:34), uploaded unlisted, and linked.
 - [ ] "Built with" / technologies list filled in (copy from above).
-- [ ] Repository link added; this branch merged to `main` so judges see the English README.
-- [ ] Optional: a 0.6.0 DMG built on a Mac (`./scripts/make_dmg.sh`, with `VERSION` bumped in `scripts/build_app.sh`) and published under Releases, so judges can try it without building.
+- [x] Repository link added; this branch merged to `main` so judges see the English README.
+- [x] DMG published under Releases (0.6.0, then 0.6.1 with two fixes found while recording the demo), so judges can try it without building.
 - [ ] Optional: with your Adaption credits, run `python3 scripts/adaption_localize_eval.py estimate`, then `run`, and add the localized results to the README.
 - [ ] Submitted before the Oct 4 deadline (check the timezone on the Devpost page).
