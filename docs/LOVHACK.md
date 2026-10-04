@@ -63,12 +63,12 @@ It reads emoji, stickers and voice-message transcripts, not just text. There's a
 
 ### What we learned
 
-Subtext is cultural. The same "fine." reads differently in a family chat and a work chat, and in Sydney and in Ohio. Small local models can do a surprising amount if the prompt teaches the conventions (🙂 after being stood up is not happy), but the high-stakes signals need a second line of defense that doesn't depend on the model.
+Subtext is cultural. The same "fine." reads differently in a family chat and a work chat, and in Sydney and in Ohio. Small local models can do a surprising amount if the prompt teaches the conventions, but they still slip: in our demo recording the 4B model took "ok 🙂" after being stood up at face value. That is why the high-stakes signals get a second line of defense that doesn't depend on the model.
 
 ### What's next
 
 - Run the Adaption-localized eval across GB/AU/IN/CA English and tune the prompt where it slips.
-- Ship the English DMG (0.6.0) with notarization.
+- Notarize the DMG (0.6.x is published but not notarized, so macOS asks for confirmation on first launch).
 - More languages through the same label mapping, starting with Spanish.
 
 ### Built with
